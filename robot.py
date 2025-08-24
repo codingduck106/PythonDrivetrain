@@ -15,7 +15,7 @@ import drivetrain
 class MyRobot(wpilib.TimedRobot):
     def robotInit(self) -> None:
         """Robot initialization function"""
-        self.controller = wpilib.XboxController(0)
+        self.controller = wpilib.PS4Controller(0)
         self.swerve = drivetrain.Drivetrain()
 
         # Slew rate limiters to make joystick inputs more gentle; 1/3 sec from 0 to 1.
@@ -31,7 +31,7 @@ class MyRobot(wpilib.TimedRobot):
         self.driveWithJoystick(True)
 
     def driveWithJoystick(self, fieldRelative: bool) -> None:
-        # Get the x speed. We are inverting this because Xbox controllers return
+        # Get the x speed. We are inverting this because PS4 controllers return
         # negative values when we push forward.
         xSpeed = (
             -self.xspeedLimiter.calculate(
@@ -41,7 +41,7 @@ class MyRobot(wpilib.TimedRobot):
         )
 
         # Get the y speed or sideways/strafe speed. We are inverting this because
-        # we want a positive value when we pull to the left. Xbox controllers
+        # we want a positive value when we pull to the left. PS4 controllers
         # return positive values when you pull to the right by default.
         ySpeed = (
             -self.yspeedLimiter.calculate(

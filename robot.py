@@ -11,6 +11,8 @@ import wpilib.drive
 import wpimath.filter
 import wpimath.controller
 import drivetrain
+from ntcore import NetworkTableInstance
+
 
 class MyRobot(wpilib.TimedRobot):
     def robotInit(self) -> None:
@@ -22,6 +24,10 @@ class MyRobot(wpilib.TimedRobot):
         self.xspeedLimiter = wpimath.filter.SlewRateLimiter(3)
         self.yspeedLimiter = wpimath.filter.SlewRateLimiter(3)
         self.rotLimiter = wpimath.filter.SlewRateLimiter(3)
+        nt_instance = NetworkTableInstance.getDefault()
+        nt_instance.startClient4("robotpytest")
+        self.pose_publisher = nt_instance.getTable("SmartDashboard").getDoubleArrayTopic("Pose").publish()
+
 
     def autonomousPeriodic(self) -> None:
         self.driveWithJoystick(False)

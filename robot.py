@@ -19,22 +19,72 @@ class MyRobot(wpilib.TimedRobot):
         """Robot initialization function"""
         self.controller = wpilib.PS4Controller(0)
         self.swerve = drivetrain.Drivetrain()
-
+        
         # Slew rate limiters to make joystick inputs more gentle; 1/3 sec from 0 to 1.
         self.xspeedLimiter = wpimath.filter.SlewRateLimiter(3)
         self.yspeedLimiter = wpimath.filter.SlewRateLimiter(3)
         self.rotLimiter = wpimath.filter.SlewRateLimiter(3)
+        
+        # NetworkTables setup
         nt_instance = NetworkTableInstance.getDefault()
         nt_instance.startClient4("robotpytest")
         self.pose_publisher = nt_instance.getTable("SmartDashboard").getDoubleArrayTopic("Pose").publish()
 
+    def robotPeriodic(self) -> None:
+        """Called every robot loop - important for simulation"""
+        # Update odometry every loop (crucial for simulation)
+        self.swerve.updateOdometry()
+        
+        # Publish pose to NetworkTables
+        pose = self.swerve.getPose()
+        pose_array = [
+            pose.X(),
+            pose.Y(), 
+            pose.rotation().degrees()
+        ]
+        self.pose_publisher.set(pose_array) # type: ignore
+
+    def autonomousInit(self) -> None:
+        """Called when autonomous starts"""
+        pass
 
     def autonomousPeriodic(self) -> None:
+        """Called every loop during autonomous"""
         self.driveWithJoystick(False)
-        self.swerve.updateOdometry()
+
+    def teleopInit(self) -> None:
+        """Called when teleop starts"""
+        pass
 
     def teleopPeriodic(self) -> None:
+        """Called every loop during teleop"""
         self.driveWithJoystick(True)
+
+    def testInit(self) -> None:
+        """Called when test mode starts"""
+        pass
+
+    def testPeriodic(self) -> None:
+        """Called every loop during test mode"""
+        pass
+
+    def disabledInit(self) -> None:
+        """Called when robot is disabled"""
+        pass
+
+    def disabledPeriodic(self) -> None:
+        """Called every loop while disabled"""
+        # Stop all modules when disabled
+        self.swerve.stopModules()
+
+    def simulationInit(self) -> None:
+        """Called when simulation starts"""
+        pass
+
+    def simulationPeriodic(self) -> None:
+        """Called every loop during simulation"""
+        # Additional simulation-specific updates can go here
+        pass
 
     def driveWithJoystick(self, fieldRelative: bool) -> None:
         # Get the x speed. We are inverting this because PS4 controllers return
@@ -58,13 +108,17 @@ class MyRobot(wpilib.TimedRobot):
 
         # Get the rate of angular rotation. We are inverting this because we want a
         # positive value when we pull to the left (remember, CCW is positive in
-        # mathematics). Xbox controllers return positive values when you pull to
+        # mathematics). PS4 controllers return positive values when you pull to
         # the right by default.
         rot = (
             -self.rotLimiter.calculate(
                 wpimath.applyDeadband(self.controller.getRightX(), 0.02)
             )
-            * drivetrain.kMaxSpeed
+            * drivetrain.kMaxAngularSpeed  # Use kMaxAngularSpeed for rotation
         )
 
         self.swerve.drive(xSpeed, ySpeed, rot, fieldRelative, self.getPeriod())
+
+
+if __name__ == "__main__":
+    wpilib.run(MyRobot)

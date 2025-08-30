@@ -100,7 +100,7 @@ class MyRobot(wpilib.TimedRobot):
         # we want a positive value when we pull to the left. PS4 controllers
         # return positive values when you pull to the right by default.
         ySpeed = (
-            -self.yspeedLimiter.calculate(
+            self.yspeedLimiter.calculate(
                 wpimath.applyDeadband(self.controller.getLeftX(), 0.02)
             )
             * drivetrain.kMaxSpeed
@@ -111,7 +111,7 @@ class MyRobot(wpilib.TimedRobot):
         # mathematics). PS4 controllers return positive values when you pull to
         # the right by default.
         rot = (
-            -self.rotLimiter.calculate(
+            self.rotLimiter.calculate(
                 wpimath.applyDeadband(self.controller.getRightX(), 0.02)
             )
             * drivetrain.kMaxAngularSpeed  # Use kMaxAngularSpeed for rotation

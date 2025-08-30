@@ -29,14 +29,14 @@ class Drivetrain:
         # Create swerve modules with updated constructor
         # SwerveModule(driveMotorId, turnMotorId, cancoderId, canBus="")
         # Update these CAN IDs to match your robot's configuration
-        self.frontLeft = swervemodule.SwerveModule(1, 2, 9, "")    # FL: drive=1, turn=2, cancoder=9
-        self.frontRight = swervemodule.SwerveModule(3, 4, 10, "")  # FR: drive=3, turn=4, cancoder=10
-        self.backLeft = swervemodule.SwerveModule(5, 6, 11, "")    # BL: drive=5, turn=6, cancoder=11
-        self.backRight = swervemodule.SwerveModule(7, 8, 12, "")   # BR: drive=7, turn=8, cancoder=12
+        self.frontLeft = swervemodule.SwerveModule(12, 10, 11, "swerve")    # FL: drive=1, turn=2, cancoder=9
+        self.frontRight = swervemodule.SwerveModule(3, 1, 2, "swerve")  # FR: drive=3, turn=4, cancoder=10
+        self.backLeft = swervemodule.SwerveModule(9, 7, 8, "swerve")    # BL: drive=5, turn=6, cancoder=11
+        self.backRight = swervemodule.SwerveModule(6, 4, 5, "swerve")   # BR: drive=7, turn=8, cancoder=12
         
         # Use Pigeon2 instead of AnalogGyro for better performance
         # Update CAN ID to match your robot's Pigeon2
-        self.gyro = Pigeon2(13, "")  # CAN ID 13, default canbus
+        self.gyro = Pigeon2(13, "swerve")  # CAN ID 13, default canbus
         
         # Alternative: Use NavX if you have one instead
         # from navx import AHRS

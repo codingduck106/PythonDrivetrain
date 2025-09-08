@@ -9,6 +9,7 @@ import wpimath.geometry
 import wpimath.kinematics
 from phoenix6.hardware import Pigeon2
 import swervemodule
+from constants import *
 
 kMaxSpeed = 3.0  # 3 meters per second
 kMaxAngularSpeed = math.pi  # 1/2 rotation per second
@@ -29,18 +30,14 @@ class Drivetrain:
         # Create swerve modules with updated constructor
         # SwerveModule(driveMotorId, turnMotorId, cancoderId, canBus="")
         # Update these CAN IDs to match your robot's configuration
-        self.frontLeft = swervemodule.SwerveModule(12, 10, 11, "swerve")    # FL: drive=1, turn=2, cancoder=9
-        self.frontRight = swervemodule.SwerveModule(3, 1, 2, "swerve")  # FR: drive=3, turn=4, cancoder=10
-        self.backLeft = swervemodule.SwerveModule(9, 7, 8, "swerve")    # BL: drive=5, turn=6, cancoder=11
-        self.backRight = swervemodule.SwerveModule(6, 4, 5, "swerve")   # BR: drive=7, turn=8, cancoder=12
+        self.frontLeft = swervemodule.SwerveModule(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, "swerve")    # FL: drive=1, turn=2, cancoder=9
+        self.frontRight = swervemodule.SwerveModule(FRConstants.DRIVE, FRConstants.TURN, FLConstants.CAN, "swerve")  # FR: drive=3, turn=4, cancoder=10
+        self.backLeft = swervemodule.SwerveModule(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, "swerve")    # BL: drive=5, turn=6, cancoder=11
+        self.backRight = swervemodule.SwerveModule(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, "swerve")   # BR: drive=7, turn=8, cancoder=12
         
         # Use Pigeon2 instead of AnalogGyro for better performance
         # Update CAN ID to match your robot's Pigeon2
-        self.gyro = Pigeon2(13, "swerve")  # CAN ID 13, default canbus
-        
-        # Alternative: Use NavX if you have one instead
-        # from navx import AHRS
-        # self.gyro = AHRS.create_spi()
+        self.gyro = Pigeon2(GYRO, "swerve")  # CAN ID 13, default canbus
         
         # Create kinematics object
         self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(

@@ -36,7 +36,7 @@ class Drivetrain(Subsystem):
         # SwerveModule(driveMotorId, turnMotorId, cancoderId, canBus="")
         # Update these CAN IDs to match your robot's configuration
         self.frontLeft = swervemodule.SwerveModule(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, "swerve")    # FL: drive=1, turn=2, cancoder=9
-        self.frontRight = swervemodule.SwerveModule(FRConstants.DRIVE, FRConstants.TURN, FLConstants.CAN, "swerve")  # FR: drive=3, turn=4, cancoder=10
+        self.frontRight = swervemodule.SwerveModule(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN, "swerve")  # FR: drive=3, turn=4, cancoder=10
         self.backLeft = swervemodule.SwerveModule(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, "swerve")    # BL: drive=5, turn=6, cancoder=11
         self.backRight = swervemodule.SwerveModule(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, "swerve")   # BR: drive=7, turn=8, cancoder=12
         
@@ -96,18 +96,22 @@ class Drivetrain(Subsystem):
     
     def shouldFlipPath(self):
         return wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kRed
-    def resetPose(self, pose: wpimath.geometry.Pose2d = wpimath.geometry.Pose2d()) -> None:
-        """Resets the odometry to the specified pose"""
-        self.odometry.resetPosition(
-            self.getRotation2d(),
-            (
-                self.frontLeft.getPosition(),
-                self.frontRight.getPosition(),
-                self.backLeft.getPosition(),
-                self.backRight.getPosition(),
-            ),
-            pose
-        )
+    
+    def resetPose(self, pose: wpimath.geometry.Pose2d = None) -> None: # type: ignore
+        if pose is None:
+            pose = wpimath.geometry.Pose2d()
+        else:
+            """Resets the odometry to the specified pose"""
+            self.odometry.resetPosition(
+                self.getRotation2d(),
+                (
+                    self.frontLeft.getPosition(),
+                    self.frontRight.getPosition(),
+                    self.backLeft.getPosition(),
+                    self.backRight.getPosition(),
+                ),
+                pose
+            )
     
     def drive(
         self,

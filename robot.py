@@ -12,23 +12,26 @@ import wpimath.filter
 import wpimath.controller
 import drivetrain
 from ntcore import NetworkTableInstance
-
+from robotcontainer import RobotContainer
 
 class MyRobot(wpilib.TimedRobot):
     def robotInit(self) -> None:
         """Robot initialization function"""
+        self.container = RobotContainer()
         self.controller = wpilib.PS4Controller(0)
-        self.swerve = drivetrain.Drivetrain()
+        self.swerve = self.container.drive
         
         # Slew rate limiters to make joystick inputs more gentle; 1/3 sec from 0 to 1.
         self.xspeedLimiter = wpimath.filter.SlewRateLimiter(3)
         self.yspeedLimiter = wpimath.filter.SlewRateLimiter(3)
         self.rotLimiter = wpimath.filter.SlewRateLimiter(3)
-        
+
         # NetworkTables setup
         nt_instance = NetworkTableInstance.getDefault()
         nt_instance.startClient4("robotpytest")
         self.pose_publisher = nt_instance.getTable("SmartDashboard").getDoubleArrayTopic("Pose").publish()
+
+        self.autoCommand = None
 
     def robotPeriodic(self) -> None:
         """Called every robot loop - important for simulation"""
@@ -46,15 +49,16 @@ class MyRobot(wpilib.TimedRobot):
 
     def autonomousInit(self) -> None:
         """Called when autonomous starts"""
-        pass
+        self.autoCommand = self.container.getAutonomousCommand()
+        if self.autoCommand is not None:
+            self.autoCommand.schedule()
 
     def autonomousPeriodic(self) -> None:
         """Called every loop during autonomous"""
-        self.driveWithJoystick(False)
 
     def teleopInit(self) -> None:
         """Called when teleop starts"""
-        pass
+        self.container.drive.resetPose()
 
     def teleopPeriodic(self) -> None:
         """Called every loop during teleop"""
@@ -86,12 +90,18 @@ class MyRobot(wpilib.TimedRobot):
         # Additional simulation-specific updates can go here
         pass
 
+
+    def applyDeadband(self, value: float, deadband: float) -> float:
+        if abs(value) > deadband:
+            return (value - deadband if value > 0 else value + deadband) / (1 - deadband)
+        return 0.0
+
     def driveWithJoystick(self, fieldRelative: bool) -> None:
         # Get the x speed. We are inverting this because PS4 controllers return
         # negative values when we push forward.
         xSpeed = (
             -self.xspeedLimiter.calculate(
-                wpimath.applyDeadband(self.controller.getLeftY(), 0.02)
+                self.applyDeadband(self.controller.getLeftY(), 0.02)
             )
             * drivetrain.kMaxSpeed
         )
@@ -101,7 +111,7 @@ class MyRobot(wpilib.TimedRobot):
         # return positive values when you pull to the right by default.
         ySpeed = (
             self.yspeedLimiter.calculate(
-                wpimath.applyDeadband(self.controller.getLeftX(), 0.02)
+                self.applyDeadband(self.controller.getLeftX(), 0.02)
             )
             * drivetrain.kMaxSpeed
         )
@@ -112,7 +122,7 @@ class MyRobot(wpilib.TimedRobot):
         # the right by default.
         rot = (
             self.rotLimiter.calculate(
-                wpimath.applyDeadband(self.controller.getRightX(), 0.02)
+                self.applyDeadband(self.controller.getRightX(), 0.02)
             )
             * drivetrain.kMaxAngularSpeed  # Use kMaxAngularSpeed for rotation
         )

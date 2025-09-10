@@ -1,3 +1,5 @@
+from commands2.button import CommandPS4Controller
+
 
 class FLConstants:
     DRIVE = 12
@@ -20,3 +22,6 @@ class BRConstants:
     CAN = 5
 
 GYRO = 13
+
+DRIVER_CONTROLLER = CommandPS4Controller(0)
+RESET_POSE = DRIVER_CONTROLLER.triangle()

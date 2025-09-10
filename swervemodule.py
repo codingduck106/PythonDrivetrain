@@ -129,12 +129,10 @@ class SwerveModule:
         )
 
     def setDesiredState(
-        self, desiredState: wpimath.kinematics.SwerveModuleState
-    ) -> None:
-        """Sets the desired state for the module.
+    self, desiredState: wpimath.kinematics.SwerveModuleState, useWPILibPID: bool = False
+) -> None:
+        """Sets the desired state for the module with optimization and telemetry."""
 
-        :param desiredState: Desired state with speed and angle.
-        """
         current_angle = wpimath.geometry.Rotation2d(self.getTurnAngleRadians())
 
         # Optimize the reference state to avoid spinning further than 90 degrees
@@ -143,43 +141,61 @@ class SwerveModule:
         # Scale speed by cosine of angle error
         desiredState.cosineScale(current_angle)
 
-        # Method 1: Use Phoenix 6 built-in control (recommended)
-        self.setDesiredStatePhoenix6(desiredState)
+        # Apply the chosen control method
+        if useWPILibPID:
+            self.setDesiredStateWPILibPID(desiredState)
+        else:
+            self.setDesiredStatePhoenix6(desiredState)
 
-        # Method 2: Use WPILib PID + Phoenix 6 voltage control (alternative)
-        # self.setDesiredStateWPILibPID(desiredState)
+        # Publish telemetry
+        self.publishTelemetry(desiredState)
+
 
     def setDesiredStatePhoenix6(self, desiredState: wpimath.kinematics.SwerveModuleState):
         """Set desired state using Phoenix 6 built-in control"""
-        # Convert desired velocity from m/s to rotations per second
         desired_velocity_mps = desiredState.speed
         desired_wheel_rps = desired_velocity_mps / (2 * math.pi * kWheelRadius)
         desired_motor_rps = desired_wheel_rps * kDriveGearRatio
 
-        # Convert desired angle from radians to rotations
         desired_angle_radians = desiredState.angle.radians()
         desired_angle_rotations = desired_angle_radians / (2 * math.pi)
 
-        # Apply control requests
         self.driveMotor.set_control(self.driveVelocityRequest.with_velocity(desired_motor_rps))
         self.turningMotor.set_control(self.turnPositionRequest.with_position(desired_angle_rotations))
 
+        # Telemetry
+        self.publishTelemetry(desiredState)
+
+
     def setDesiredStateWPILibPID(self, desiredState: wpimath.kinematics.SwerveModuleState):
         """Alternative: Set desired state using WPILib PID controllers"""
-        # Calculate drive output using WPILib PID
-        driveOutput = self.drivePIDController.calculate(
-            self.getDriveVelocityMPS(), desiredState.speed
-        )
+        driveOutput = self.drivePIDController.calculate(self.getDriveVelocityMPS(), desiredState.speed)
         driveFeedforward = self.driveFeedforward.calculate(desiredState.speed)
 
-        # Calculate turn output using WPILib PID
-        turnOutput = self.turningPIDController.calculate(
-            self.getTurnAngleRadians(), desiredState.angle.radians()
-        )
-        turnFeedforward = self.turnFeedforward.calculate(
-            self.turningPIDController.getSetpoint()
-        )
+        turnOutput = self.turningPIDController.calculate(self.getTurnAngleRadians(), desiredState.angle.radians())
+        turnFeedforward = self.turnFeedforward.calculate(self.turningPIDController.getSetpoint())
 
-        # Apply voltages
         self.driveMotor.setVoltage(driveOutput + driveFeedforward)
         self.turningMotor.setVoltage(turnOutput + turnFeedforward)
+
+        # Telemetry
+        self.publishTelemetry(desiredState)
+
+    def publishTelemetry(self, desiredState: wpimath.kinematics.SwerveModuleState | None = None):
+        from ntcore import NetworkTableInstance
+        nt = NetworkTableInstance.getDefault()
+        table = nt.getTable("SwerveModule")
+
+        # Create publishers once (ideally in __init__) and reuse
+        drive_pub = table.getDoubleTopic("DriveVelocity_FL").publish()
+        turn_pub = table.getDoubleTopic("TurnAngle_FL").publish()
+
+        # Set values via the publisher
+        drive_pub.set(self.getDriveVelocityMPS())
+        turn_pub.set(self.getTurnAngleRadians())
+
+        if desiredState:
+            desired_drive_pub = table.getDoubleTopic("DesiredDrive_FL").publish()
+            desired_angle_pub = table.getDoubleTopic("DesiredAngle_FL").publish()
+            desired_drive_pub.set(desiredState.speed)
+            desired_angle_pub.set(desiredState.angle.radians())

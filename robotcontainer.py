@@ -1,42 +1,29 @@
-from pathplannerlib.auto import PathPlannerAuto, AutoBuilder
-from pathplannerlib.controller import PPHolonomicDriveController
-from pathplannerlib.config import RobotConfig, PIDConstants
-from wpilib import DriverStation, SmartDashboard
-from commands2.button import CommandPS4Controller
-from commands2.instantcommand import InstantCommand
+from pathplannerlib.auto import AutoBuilder
 from drivetrain import Drivetrain
+from ntcore import NetworkTableInstance
+from wpilib import SmartDashboard, DriverStation
+from commands2.instantcommand import InstantCommand
 from constants import *
 
-# TODO: ONLY INCLUDES DRIVETRAIN. ADD OTHER SUBSYSTEMS LATER
-
 class RobotContainer:
-    ALLIANCE_USED_IN_PATHS = DriverStation.Alliance.kBlue
-    drive: Drivetrain
-    
     def __init__(self):
         self.drive = Drivetrain()
         self.configureBindings()
+
+        # Auto chooser
         self.autoChooser = AutoBuilder.buildAutoChooser()
+
+        # NetworkTables
+        nt_instance = NetworkTableInstance.getDefault()
+        self.nt_table = nt_instance.getTable("SmartDashboard")
+        self.auto_topic = self.nt_table.getStringTopic("SelectedAuto").publish()
         SmartDashboard.putData("Auto Chooser", self.autoChooser)
+
     def configureBindings(self):
         RESET_POSE.onTrue(InstantCommand(self.drive.resetPose, self.drive))
 
-    # def configureAuto(self, drive: Drivetrain):
-    #     config = RobotConfig.fromGUISettings()
-    #     AutoBuilder.configure(
-    #         drive.getPose,
-    #         drive.resetPose,
-    #         drive.getRobotRelativeSpeeds,
-    #         drive.driveRobotRelative,
-    #         PPHolonomicDriveController(
-    #             PIDConstants(15,0.0,0.0),
-    #             PIDConstants(6.85,0.0,1.3)
-    #         ),
-    #         config,
-    #         lambda: True if DriverStation.getAlliance() != self.ALLIANCE_USED_IN_PATHS else False,
-    #         self.drive
-    #     )
-    #     return AutoBuilder.buildAutoChooser()
-    
     def getAutonomousCommand(self):
-        return self.autoChooser.getSelected()
+        cmd = self.autoChooser.getSelected()
+        name = str(self.autoChooser.getSelected()) if cmd else "None"
+        self.auto_topic.set(name)
+        return cmd

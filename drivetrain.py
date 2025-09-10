@@ -43,6 +43,7 @@ class Drivetrain(Subsystem):
         # Use Pigeon2 instead of AnalogGyro for better performance
         # Update CAN ID to match your robot's Pigeon2
         self.gyro = Pigeon2(GYRO, "swerve")  # CAN ID 13, default canbus
+        self.gyro.reset()
         
         # Create kinematics object
         self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(
@@ -97,7 +98,7 @@ class Drivetrain(Subsystem):
     def shouldFlipPath(self):
         return wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kRed
     
-    def resetPose(self, pose: wpimath.geometry.Pose2d = None) -> None: # type: ignore
+    def resetPose(self, pose: wpimath.geometry.Pose2d | None= None) -> None:
         if pose is None:
             pose = wpimath.geometry.Pose2d()
         else:

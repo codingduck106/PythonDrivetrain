@@ -19,7 +19,7 @@ class RobotContainer:
         self.autoChooser = AutoBuilder.buildAutoChooser()
         SmartDashboard.putData("Auto Chooser", self.autoChooser)
     def configureBindings(self):
-        RESET_POSE.onTrue(InstantCommand(self.drive.resetPose, self.drive)) # type: ignore
+        RESET_POSE.onTrue(InstantCommand(self.drive.resetPose, self.drive))
 
     # def configureAuto(self, drive: Drivetrain):
     #     config = RobotConfig.fromGUISettings()

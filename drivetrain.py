@@ -18,6 +18,9 @@ kMaxAngularSpeed = math.pi  # rad/sec
 
 class Drivetrain(Subsystem):
     def __init__(self) -> None:
+        """Initializes a drivetrain subsystem"""
+
+
         # Module positions
         self.frontLeftLocation = wpimath.geometry.Translation2d(0.381, 0.381)
         self.frontRightLocation = wpimath.geometry.Translation2d(0.381, -0.381)
@@ -85,9 +88,15 @@ class Drivetrain(Subsystem):
         return wpimath.geometry.Rotation2d.fromDegrees(yaw_deg)
 
     def getPose(self) -> wpimath.geometry.Pose2d:
+        """Returns the current Pose as a Pose2d
+        
+        :returns: a `Pose2d` object representing the current pose"""
         return self.odometry.getPose()
 
     def shouldFlipPath(self):
+        """returns whether the autobuilder should flip the path or not
+        
+        :returns: `bool` """
         return wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kRed
 
     def resetPose(self, pose: wpimath.geometry.Pose2d | None = None) -> None:
@@ -110,6 +119,13 @@ class Drivetrain(Subsystem):
 
     # ---------------------- Driving ----------------------
     def drive(self, xSpeed, ySpeed, rot, fieldRelative: bool, periodSeconds: float):
+        """Drives the robot based on speed, and rotation
+        
+        :param xSpeed: the current x speed of the robot
+        :param ySpeed: the current y speed of the robot
+        :param fieldRelative: whether or not the given values are field relative or not
+        :param periodSeconds: period of time for discretization of ChassisSpeeds"""
+
         if fieldRelative:
             chassisSpeeds = wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(
                 xSpeed, ySpeed, rot, self.getRotation2d()
@@ -117,16 +133,22 @@ class Drivetrain(Subsystem):
         else:
             chassisSpeeds = wpimath.kinematics.ChassisSpeeds(xSpeed, ySpeed, rot)
 
+        # Discretization of speeds  
         discretized = wpimath.kinematics.ChassisSpeeds.discretize(chassisSpeeds, periodSeconds)
         swerveStates = self.kinematics.toSwerveModuleStates(discretized)
         wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveStates, kMaxSpeed)
 
+        # initialize swerve modules
         self.frontLeft.setDesiredState(swerveStates[0])
         self.frontRight.setDesiredState(swerveStates[1])
         self.backLeft.setDesiredState(swerveStates[2])
         self.backRight.setDesiredState(swerveStates[3])
 
     def driveRobotRelative(self, speeds, feedforward):
+        """Drives robot given a `ChassisSpeeds` object, and a feedforward object.
+        
+        :param speeds: a `ChassisSpeeds` object, which are the given speeds
+        :param feedforward: the feedforward for the drive. this drivetrain doesn't need one, but pathplanner requires that it be there."""
         swerveStates = self.kinematics.toSwerveModuleStates(speeds)
         self.frontLeft.setDesiredState(swerveStates[0])
         self.frontRight.setDesiredState(swerveStates[1])
@@ -135,6 +157,7 @@ class Drivetrain(Subsystem):
 
     # ---------------------- Odometry ----------------------
     def updateOdometry(self) -> None:
+        """Updates the robot's field odometry"""
         self.odometry.update(
             self.getRotation2d(),
             (
@@ -148,6 +171,7 @@ class Drivetrain(Subsystem):
 
     # ---------------------- Telemetry ----------------------
     def publishTelemetry(self):
+        """Publishes the robot's telemetry to SmartDashboard"""
         # Pose
         pose = self.getPose()
         self.pose_topic.set([pose.X(), pose.Y(), pose.rotation().degrees()])
@@ -209,4 +233,7 @@ class Drivetrain(Subsystem):
         self.backRight.setDesiredState(desiredStates[3])
 
     def getRobotRelativeSpeeds(self):
+        """Returns a ChassisSpeeds object representing the robot relative speeds
+        
+        :returns: a `ChassisSpeeds` object"""
         return self.kinematics.toChassisSpeeds(self.getModuleStates())

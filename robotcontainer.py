@@ -7,6 +7,7 @@ from constants import *
 
 class RobotContainer:
     def __init__(self):
+        """Initializes a robot container"""
         self.drive = Drivetrain()
         self.configureBindings()
 
@@ -20,9 +21,11 @@ class RobotContainer:
         SmartDashboard.putData("Auto Chooser", self.autoChooser)
 
     def configureBindings(self):
+        """Configure controller bindings"""
         RESET_POSE.onTrue(InstantCommand(self.drive.resetPose, self.drive))
 
     def getAutonomousCommand(self):
+        """gets the autonomous command from the autoChooser"""
         cmd = self.autoChooser.getSelected()
         name = str(self.autoChooser.getSelected()) if cmd else "None"
         self.auto_topic.set(name)

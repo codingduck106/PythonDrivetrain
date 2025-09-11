@@ -202,6 +202,9 @@ class SwerveModule:
         self.publishTelemetry(desiredState)
 
     def publishTelemetry(self, desiredState: wpimath.kinematics.SwerveModuleState | None = None):
+        """Publishes the telemetry to NetworkTables
+        
+        :param desiredState: the desired swerve module state as a `SwerveModuleState`"""
         from ntcore import NetworkTableInstance
         nt = NetworkTableInstance.getDefault()
         table = nt.getTable("SwerveModule")

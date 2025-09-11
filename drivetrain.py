@@ -161,7 +161,7 @@ class Drivetrain(Subsystem):
 
     # ---------------------- Utilities ----------------------
     def stopModules(self):
-       """Stops all swerve modules"""
+        """Stops all swerve modules"""
         zeroState = wpimath.kinematics.SwerveModuleState(0, wpimath.geometry.Rotation2d(0))
         self.frontLeft.setDesiredState(zeroState)
         self.frontRight.setDesiredState(zeroState)

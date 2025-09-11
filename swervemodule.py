@@ -13,9 +13,9 @@ from phoenix6.canbus import CANBus
 from phoenix6.configs import Slot0Configs, TalonFXConfiguration, CANcoderConfiguration
 from phoenix6.controls import VelocityVoltage, PositionVoltage
 
-kWheelRadius = 0.0508  # meters
-kDriveGearRatio = 6.75  # Motor rotations per wheel rotation (example - adjust for your robot)
-kTurnGearRatio = 12.8   # Motor rotations per module rotation (example - adjust for your robot)
+kWheelRadius = 0.0508  # measured in meters
+kDriveGearRatio = 6.75  # Motor rotations per wheel rotation
+kTurnGearRatio = 12.8   # Motor rotations per module rotation
 kModuleMaxAngularVelocity = math.pi
 kModuleMaxAngularAcceleration = math.tau
 
@@ -33,6 +33,8 @@ class SwerveModule:
         :param cancoderId: CAN ID for CANcoder
         :param canBus: Optional: canbus name
         """
+
+        # initialize motors and cancoder
         self.driveMotor = TalonFX(driveMotorId, canbus=canBus)
         self.turningMotor = TalonFX(turnMotorId, canbus=canBus)
         self.cancoder = CANcoder(cancoderId, canbus=canBus)
@@ -49,6 +51,7 @@ class SwerveModule:
         # Configure sensor-to-mechanism ratio for drive (gear ratio)
         driveConfig.feedback.sensor_to_mechanism_ratio = kDriveGearRatio
         
+        # Apply the drive config to the motor
         self.driveMotor.configurator.apply(driveConfig)
 
         # Configure turn motor
@@ -63,10 +66,12 @@ class SwerveModule:
         # Configure sensor-to-mechanism ratio for turn (gear ratio)
         turnConfig.feedback.sensor_to_mechanism_ratio = kTurnGearRatio
         
+        # Apply turn motor config to the motor
         self.turningMotor.configurator.apply(turnConfig)
 
         # Configure CANcoder
         cancoderConfig = CANcoderConfiguration()
+
         # Add any CANcoder-specific configuration here
         self.cancoder.configurator.apply(cancoderConfig)
 
@@ -86,7 +91,9 @@ class SwerveModule:
         self.turningPIDController.enableContinuousInput(-math.pi, math.pi)
 
     def getDriveDistanceMeters(self) -> float:
-        """Get drive distance in meters"""
+        """Get drive distance in meters
+        
+        :returns: drive distance in meters"""
         # Get position in rotations, convert to wheel rotations, then to distance
         motor_rotations = self.driveMotor.get_position().value
         wheel_rotations = motor_rotations / kDriveGearRatio
@@ -94,7 +101,9 @@ class SwerveModule:
         return distance_meters
 
     def getDriveVelocityMPS(self) -> float:
-        """Get drive velocity in meters per second"""
+        """Get drive velocity in meters per second
+        
+        :returns: the drive velocity in meters per second"""
         # Get velocity in rotations per second, convert to wheel rotations, then to m/s
         motor_rps = self.driveMotor.get_velocity().value
         wheel_rps = motor_rps / kDriveGearRatio
@@ -102,7 +111,9 @@ class SwerveModule:
         return velocity_mps
 
     def getTurnAngleRadians(self) -> float:
-        """Get turn angle in radians from CANcoder"""
+        """Get turn angle in radians from CANcoder
+        
+        :returns: The turn angle in radians from CANcoder"""
         # Get absolute position from CANcoder in rotations, convert to radians
         cancoder_rotations = self.cancoder.get_absolute_position().value
         angle_radians = cancoder_rotations * 2 * math.pi
@@ -150,7 +161,9 @@ class SwerveModule:
         # self.setDesiredStateWPILibPID(desiredState)
 
     def setDesiredStatePhoenix6(self, desiredState: wpimath.kinematics.SwerveModuleState):
-        """Set desired state using Phoenix 6 built-in control"""
+        """Set desired state using Phoenix 6 built-in control
+        
+        :param desiredState: desired state with speed and angle"""
         # Convert desired velocity from m/s to rotations per second
         desired_velocity_mps = desiredState.speed
         desired_wheel_rps = desired_velocity_mps / (2 * math.pi * kWheelRadius)
@@ -165,7 +178,9 @@ class SwerveModule:
         self.turningMotor.set_control(self.turnPositionRequest.with_position(desired_angle_rotations))
 
     def setDesiredStateWPILibPID(self, desiredState: wpimath.kinematics.SwerveModuleState):
-        """Alternative: Set desired state using WPILib PID controllers"""
+        """Alternative: Set desired state using WPILib PID controllers
+        
+        :param desiredState: desired state with speed and angle"""
         # Calculate drive output using WPILib PID
         driveOutput = self.drivePIDController.calculate(
             self.getDriveVelocityMPS(), desiredState.speed

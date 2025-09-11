@@ -87,8 +87,7 @@ class MyRobot(wpilib.TimedRobot):
         pass
 
     def driveWithJoystick(self, fieldRelative: bool) -> None:
-        # Get the x speed. We are inverting this because PS4 controllers return
-        # negative values when we push forward.
+        # Get the x speed. 
         xSpeed = (
             -self.xspeedLimiter.calculate(
                 wpimath.applyDeadband(self.controller.getLeftY(), 0.02)
@@ -96,9 +95,7 @@ class MyRobot(wpilib.TimedRobot):
             * drivetrain.kMaxSpeed
         )
 
-        # Get the y speed or sideways/strafe speed. We are inverting this because
-        # we want a positive value when we pull to the left. PS4 controllers
-        # return positive values when you pull to the right by default.
+        # Get the y speed or sideways/strafe speed.
         ySpeed = (
             self.yspeedLimiter.calculate(
                 wpimath.applyDeadband(self.controller.getLeftX(), 0.02)
@@ -106,10 +103,7 @@ class MyRobot(wpilib.TimedRobot):
             * drivetrain.kMaxSpeed
         )
 
-        # Get the rate of angular rotation. We are inverting this because we want a
-        # positive value when we pull to the left (remember, CCW is positive in
-        # mathematics). PS4 controllers return positive values when you pull to
-        # the right by default.
+        # Get the rate of angular rotation. 
         rot = (
             self.rotLimiter.calculate(
                 wpimath.applyDeadband(self.controller.getRightX(), 0.02)

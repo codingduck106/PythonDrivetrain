@@ -6,9 +6,11 @@
 
 import math
 import wpimath.geometry
+from wpimath.geometry import Translation2d
 import wpimath.kinematics
+from wpimath.kinematics import SwerveModuleState
 from phoenix6.hardware import Pigeon2
-import swervemodule
+from swervemodule import SwerveModule
 from constants import *
 
 kMaxSpeed = 3.0  # 3 meters per second
@@ -30,14 +32,13 @@ class Drivetrain:
         # Create swerve modules with updated constructor
         # SwerveModule(driveMotorId, turnMotorId, cancoderId, canBus="")
         # Update these CAN IDs to match your robot's configuration
-        self.frontLeft = swervemodule.SwerveModule(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, "swerve")    # FL: drive=1, turn=2, cancoder=9
-        self.frontRight = swervemodule.SwerveModule(FRConstants.DRIVE, FRConstants.TURN, FLConstants.CAN, "swerve")  # FR: drive=3, turn=4, cancoder=10
-        self.backLeft = swervemodule.SwerveModule(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, "swerve")    # BL: drive=5, turn=6, cancoder=11
-        self.backRight = swervemodule.SwerveModule(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, "swerve")   # BR: drive=7, turn=8, cancoder=12
+        self.frontLeft = SwerveModule(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, "swerve") 
+        self.frontRight = SwerveModule(FRConstants.DRIVE, FRConstants.TURN, FLConstants.CAN, "swerve")
+        self.backLeft = SwerveModule(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, "swerve") 
+        self.backRight = SwerveModule(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, "swerve") 
         
         # Use Pigeon2 instead of AnalogGyro for better performance
-        # Update CAN ID to match your robot's Pigeon2
-        self.gyro = Pigeon2(GYRO, "swerve")  # CAN ID 13, default canbus
+        self.gyro = Pigeon2(GYRO, "swerve")
         
         # Create kinematics object
         self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(
@@ -63,17 +64,26 @@ class Drivetrain:
         self.gyro.reset()
     
     def getRotation2d(self) -> wpimath.geometry.Rotation2d:
-        """Get current rotation from gyro"""
+        """Get current rotation from gyro
+        
+        :returns: current rotation from gyro as a Rotation2d object"""
+
         # Pigeon2 returns yaw in degrees, convert to Rotation2d
         yaw_degrees = self.gyro.get_yaw().value
         return wpimath.geometry.Rotation2d.fromDegrees(yaw_degrees)
     
     def getPose(self) -> wpimath.geometry.Pose2d:
-        """Returns the current pose of the robot"""
+        """Returns the current pose of the robot
+        
+        :returns: current pose of the robot as a Pose2d object"""
         return self.odometry.getPose()
     
     def resetOdometry(self, pose: wpimath.geometry.Pose2d) -> None:
-        """Resets the odometry to the specified pose"""
+        """Resets the odometry to the specified pose
+        
+        :param pose: a specified pose as a Pose2d object"""
+
+
         self.odometry.resetPosition(
             self.getRotation2d(),
             (
@@ -148,7 +158,10 @@ class Drivetrain:
         self.backRight.setDesiredState(wpimath.kinematics.SwerveModuleState(0, wpimath.geometry.Rotation2d(0)))
     
     def getModuleStates(self) -> tuple:
-        """Get current states of all modules"""
+        """Get current states of all modules
+        Order: FL, FR, BL, BR
+
+        :returns: a tuple containing 4 SwerveModuleState objects, representing the state of each module"""
         return (
             self.frontLeft.getState(),
             self.frontRight.getState(),
@@ -157,7 +170,10 @@ class Drivetrain:
         )
     
     def getModulePositions(self) -> tuple:
-        """Get current positions of all modules"""
+        """Get current positions of all modules
+        Order: FL, FR, BL, BR
+
+        :returns: a tuple containing 4 SwerveModulePosition objects, representing the position of each module."""
         return (
             self.frontLeft.getPosition(),
             self.frontRight.getPosition(),
@@ -165,8 +181,11 @@ class Drivetrain:
             self.backRight.getPosition(),
         )
     
-    def setModuleStates(self, desiredStates) -> None:
-        """Set desired states for all modules"""
+    def setModuleStates(self, desiredStates: tuple[SwerveModuleState, SwerveModuleState, SwerveModuleState, SwerveModuleState]) -> None:
+        """Set desired states for all modules
+        Order: FL, FR, BL, BR
+        
+        :param desiredStates: a tuple containing SwerveModuleState objects containing the desired state for each module."""
         # Desaturate wheel speeds
         wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(
             desiredStates, kMaxSpeed

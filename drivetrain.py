@@ -1,9 +1,3 @@
-#
-# Copyright (c) FIRST and other WPILib contributors.
-# Open Source Software; you can modify and/or share it under the terms of
-# the WPILib BSD license file in the root directory of this project.
-#
-
 import math
 import wpimath.geometry
 from wpimath.geometry import Translation2d
@@ -12,18 +6,19 @@ from wpimath.kinematics import SwerveModuleState
 from phoenix6.hardware import Pigeon2
 from swervemodule import SwerveModule
 from constants import *
+from commands2 import Subsystem
+import wpilib
+from pathplannerlib.auto import AutoBuilder
+from pathplannerlib.controller import PPHolonomicDriveController
+from pathplannerlib.config import RobotConfig, PIDConstants
+from ntcore import NetworkTableInstance
 
-kMaxSpeed = 3.0  # 3 meters per second
-kMaxAngularSpeed = math.pi  # 1/2 rotation per second
+kMaxSpeed = 3.0  # meters/sec
+kMaxAngularSpeed = math.pi  # rad/sec
 
-class Drivetrain:
-    """
-    Represents a swerve drive style drivetrain.
-    """
-    
+class Drivetrain(Subsystem):
     def __init__(self) -> None:
-        # Define module locations (distance from center of robot)
-        # These values should match your robot's actual dimensions
+        # Module positions
         self.frontLeftLocation = wpimath.geometry.Translation2d(0.381, 0.381)
         self.frontRightLocation = wpimath.geometry.Translation2d(0.381, -0.381)
         self.backLeftLocation = wpimath.geometry.Translation2d(-0.381, 0.381)
@@ -41,14 +36,13 @@ class Drivetrain:
         self.gyro = Pigeon2(GYRO, "swerve")
         
         # Create kinematics object
+
         self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(
             self.frontLeftLocation,
             self.frontRightLocation,
             self.backLeftLocation,
             self.backRightLocation,
         )
-        
-        # Create odometry object
         self.odometry = wpimath.kinematics.SwerveDrive4Odometry(
             self.kinematics,
             self.getRotation2d(),
@@ -59,31 +53,50 @@ class Drivetrain:
                 self.backRight.getPosition(),
             ),
         )
-        
-        # Reset gyro
-        self.gyro.reset()
-    
+
+        # NetworkTables
+        nt_instance = NetworkTableInstance.getDefault()
+        self.nt_table = nt_instance.getTable("SmartDashboard")
+        self.pose_topic = self.nt_table.getDoubleArrayTopic("DrivetrainPose").publish()
+        self.module_states_topic = self.nt_table.getDoubleArrayTopic("DrivetrainModuleStates").publish()
+
+        # AutoBuilder
+        config = RobotConfig.fromGUISettings()
+        AutoBuilder.configure(
+            self.getPose,
+            self.resetPose,
+            self.getRobotRelativeSpeeds,
+            lambda speeds, ff: self.driveRobotRelative(speeds, ff),
+            PPHolonomicDriveController(
+                PIDConstants(5.0, 0.0, 0.0),
+                PIDConstants(5.0, 0.0, 0.0),
+            ),
+            config,
+            self.shouldFlipPath,
+            self,
+        )
+
+    # ---------------------- Basic Methods ----------------------
     def getRotation2d(self) -> wpimath.geometry.Rotation2d:
         """Get current rotation from gyro
         
         :returns: current rotation from gyro as a Rotation2d object"""
+        yaw_deg = self.gyro.get_yaw().value
+        return wpimath.geometry.Rotation2d.fromDegrees(yaw_deg)
 
-        # Pigeon2 returns yaw in degrees, convert to Rotation2d
-        yaw_degrees = self.gyro.get_yaw().value
-        return wpimath.geometry.Rotation2d.fromDegrees(yaw_degrees)
-    
     def getPose(self) -> wpimath.geometry.Pose2d:
-        """Returns the current pose of the robot
-        
-        :returns: current pose of the robot as a Pose2d object"""
         return self.odometry.getPose()
-    
-    def resetOdometry(self, pose: wpimath.geometry.Pose2d) -> None:
+
+    def shouldFlipPath(self):
+        return wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kRed
+
+    def resetPose(self, pose: wpimath.geometry.Pose2d | None = None) -> None:
         """Resets the odometry to the specified pose
         
         :param pose: a specified pose as a Pose2d object"""
-
-
+      
+        if pose is None:
+            pose = wpimath.geometry.Pose2d()
         self.odometry.resetPosition(
             self.getRotation2d(),
             (
@@ -92,54 +105,36 @@ class Drivetrain:
                 self.backLeft.getPosition(),
                 self.backRight.getPosition(),
             ),
-            pose
+            pose,
         )
-    
-    def drive(
-        self,
-        xSpeed: float,
-        ySpeed: float,
-        rot: float,
-        fieldRelative: bool,
-        periodSeconds: float,
-    ) -> None:
-        """
-        Method to drive the robot using joystick info.
-        :param xSpeed: Speed of the robot in the x direction (forward).
-        :param ySpeed: Speed of the robot in the y direction (sideways).
-        :param rot: Angular rate of the robot.
-        :param fieldRelative: Whether the provided x and y speeds are relative to the field.
-        :param periodSeconds: Time period for discretization
-        """
-        # Create chassis speeds
+
+    # ---------------------- Driving ----------------------
+    def drive(self, xSpeed, ySpeed, rot, fieldRelative: bool, periodSeconds: float):
         if fieldRelative:
             chassisSpeeds = wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(
                 xSpeed, ySpeed, rot, self.getRotation2d()
             )
         else:
             chassisSpeeds = wpimath.kinematics.ChassisSpeeds(xSpeed, ySpeed, rot)
-        
-        # Discretize chassis speeds
-        discretizedSpeeds = wpimath.kinematics.ChassisSpeeds.discretize(
-            chassisSpeeds, periodSeconds
-        )
-        
-        # Convert to swerve module states
-        swerveModuleStates = self.kinematics.toSwerveModuleStates(discretizedSpeeds)
-        
-        # Desaturate wheel speeds
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(
-            swerveModuleStates, kMaxSpeed
-        )
-        
-        # Set desired states for each module
-        self.frontLeft.setDesiredState(swerveModuleStates[0])
-        self.frontRight.setDesiredState(swerveModuleStates[1])
-        self.backLeft.setDesiredState(swerveModuleStates[2])
-        self.backRight.setDesiredState(swerveModuleStates[3])
-    
+
+        discretized = wpimath.kinematics.ChassisSpeeds.discretize(chassisSpeeds, periodSeconds)
+        swerveStates = self.kinematics.toSwerveModuleStates(discretized)
+        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveStates, kMaxSpeed)
+
+        self.frontLeft.setDesiredState(swerveStates[0])
+        self.frontRight.setDesiredState(swerveStates[1])
+        self.backLeft.setDesiredState(swerveStates[2])
+        self.backRight.setDesiredState(swerveStates[3])
+
+    def driveRobotRelative(self, speeds, feedforward):
+        swerveStates = self.kinematics.toSwerveModuleStates(speeds)
+        self.frontLeft.setDesiredState(swerveStates[0])
+        self.frontRight.setDesiredState(swerveStates[1])
+        self.backLeft.setDesiredState(swerveStates[2])
+        self.backRight.setDesiredState(swerveStates[3])
+
+    # ---------------------- Odometry ----------------------
     def updateOdometry(self) -> None:
-        """Updates the field relative position of the robot."""
         self.odometry.update(
             self.getRotation2d(),
             (
@@ -149,15 +144,31 @@ class Drivetrain:
                 self.backRight.getPosition(),
             ),
         )
-    
-    def stopModules(self) -> None:
-        """Stop all swerve modules"""
-        self.frontLeft.setDesiredState(wpimath.kinematics.SwerveModuleState(0, wpimath.geometry.Rotation2d(0)))
-        self.frontRight.setDesiredState(wpimath.kinematics.SwerveModuleState(0, wpimath.geometry.Rotation2d(0)))
-        self.backLeft.setDesiredState(wpimath.kinematics.SwerveModuleState(0, wpimath.geometry.Rotation2d(0)))
-        self.backRight.setDesiredState(wpimath.kinematics.SwerveModuleState(0, wpimath.geometry.Rotation2d(0)))
-    
-    def getModuleStates(self) -> tuple:
+        self.publishTelemetry()
+
+    # ---------------------- Telemetry ----------------------
+    def publishTelemetry(self):
+        # Pose
+        pose = self.getPose()
+        self.pose_topic.set([pose.X(), pose.Y(), pose.rotation().degrees()])
+
+        # Module states
+        states = self.getModuleStates()
+        arr = []
+        for s in states:
+            arr += [s.speed, s.angle.radians()]
+        self.module_states_topic.set(arr)
+
+    # ---------------------- Utilities ----------------------
+    def stopModules(self):
+       """Stops all swerve modules"""
+        zeroState = wpimath.kinematics.SwerveModuleState(0, wpimath.geometry.Rotation2d(0))
+        self.frontLeft.setDesiredState(zeroState)
+        self.frontRight.setDesiredState(zeroState)
+        self.backLeft.setDesiredState(zeroState)
+        self.backRight.setDesiredState(zeroState)
+
+    def getModuleStates(self):
         """Get current states of all modules
         Order: FL, FR, BL, BR
 
@@ -174,6 +185,7 @@ class Drivetrain:
         Order: FL, FR, BL, BR
 
         :returns: a tuple containing 4 SwerveModulePosition objects, representing the position of each module."""
+        
         return (
             self.frontLeft.getPosition(),
             self.frontRight.getPosition(),
@@ -195,3 +207,6 @@ class Drivetrain:
         self.frontRight.setDesiredState(desiredStates[1])
         self.backLeft.setDesiredState(desiredStates[2])
         self.backRight.setDesiredState(desiredStates[3])
+
+    def getRobotRelativeSpeeds(self):
+        return self.kinematics.toChassisSpeeds(self.getModuleStates())

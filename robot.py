@@ -1,118 +1,58 @@
-#!/usr/bin/env python3
-#
-# Copyright (c) FIRST and other WPILib contributors.
-# Open Source Software; you can modify and/or share it under the terms of
-# the WPILib BSD license file in the root directory of this project.
-#
-
 import wpilib
 import wpimath
-import wpilib.drive
 import wpimath.filter
-import wpimath.controller
 import drivetrain
 from ntcore import NetworkTableInstance
-
+from robotcontainer import RobotContainer
 
 class MyRobot(wpilib.TimedRobot):
-    def robotInit(self) -> None:
-        """Robot initialization function"""
+    def robotInit(self):
+        self.container = RobotContainer()
         self.controller = wpilib.PS4Controller(0)
-        self.swerve = drivetrain.Drivetrain()
-        
-        # Slew rate limiters to make joystick inputs more gentle; 1/3 sec from 0 to 1.
-        self.xspeedLimiter = wpimath.filter.SlewRateLimiter(3)
-        self.yspeedLimiter = wpimath.filter.SlewRateLimiter(3)
+        self.swerve = self.container.drive
+
+        # Slew rate limiters
+        self.xLimiter = wpimath.filter.SlewRateLimiter(3)
+        self.yLimiter = wpimath.filter.SlewRateLimiter(3)
         self.rotLimiter = wpimath.filter.SlewRateLimiter(3)
-        
-        # NetworkTables setup
+
+        # NetworkTables
         nt_instance = NetworkTableInstance.getDefault()
-        nt_instance.startClient4("robotpytest")
-        self.pose_publisher = nt_instance.getTable("SmartDashboard").getDoubleArrayTopic("Pose").publish()
+        self.nt_table = nt_instance.getTable("SmartDashboard")
+        self.pose_pub = self.nt_table.getDoubleArrayTopic("RobotPose").publish()
+        self.speeds_pub = self.nt_table.getDoubleArrayTopic("ChassisSpeeds").publish()
+        self.mode_pub = self.nt_table.getStringTopic("RobotMode").publish()
 
-    def robotPeriodic(self) -> None:
-        """Called every robot loop - important for simulation"""
-        # Update odometry every loop (crucial for simulation)
+        self.autoCommand = None
+
+    def robotPeriodic(self):
         self.swerve.updateOdometry()
-        
-        # Publish pose to NetworkTables
+
+        # Pose
         pose = self.swerve.getPose()
-        pose_array = [
-            pose.X(),
-            pose.Y(), 
-            pose.rotation().degrees()
-        ]
-        self.pose_publisher.set(pose_array) # type: ignore
+        self.pose_pub.set([pose.X(), pose.Y(), pose.rotation().degrees()])
 
-    def autonomousInit(self) -> None:
-        """Called when autonomous starts"""
-        pass
+        # Chassis speeds
+        speeds = self.swerve.getRobotRelativeSpeeds()
+        self.speeds_pub.set([speeds.vx, speeds.vy, speeds.omega])
 
-    def autonomousPeriodic(self) -> None:
-        """Called every loop during autonomous"""
-        self.driveWithJoystick(False)
+        # Mode
+        mode_str = "Autonomous" if self.isAutonomous() else "Teleop" if self.isTeleop() else "Disabled"
+        self.mode_pub.set(mode_str)
 
-    def teleopInit(self) -> None:
-        """Called when teleop starts"""
-        pass
+    def autonomousInit(self):
+        self.autoCommand = self.container.getAutonomousCommand()
+        if self.autoCommand:
+            self.autoCommand.schedule()
 
-    def teleopPeriodic(self) -> None:
-        """Called every loop during teleop"""
+    def teleopPeriodic(self):
         self.driveWithJoystick(True)
-
-    def testInit(self) -> None:
-        """Called when test mode starts"""
-        pass
-
-    def testPeriodic(self) -> None:
-        """Called every loop during test mode"""
-        pass
-
-    def disabledInit(self) -> None:
-        """Called when robot is disabled"""
-        pass
-
-    def disabledPeriodic(self) -> None:
-        """Called every loop while disabled"""
-        # Stop all modules when disabled
-        self.swerve.stopModules()
-
-    def simulationInit(self) -> None:
-        """Called when simulation starts"""
-        pass
-
-    def simulationPeriodic(self) -> None:
-        """Called every loop during simulation"""
-        # Additional simulation-specific updates can go here
-        pass
-
-    def driveWithJoystick(self, fieldRelative: bool) -> None:
-        # Get the x speed. 
-        xSpeed = (
-            -self.xspeedLimiter.calculate(
-                wpimath.applyDeadband(self.controller.getLeftY(), 0.02)
-            )
-            * drivetrain.kMaxSpeed
-        )
-
-        # Get the y speed or sideways/strafe speed.
-        ySpeed = (
-            self.yspeedLimiter.calculate(
-                wpimath.applyDeadband(self.controller.getLeftX(), 0.02)
-            )
-            * drivetrain.kMaxSpeed
-        )
-
-        # Get the rate of angular rotation. 
-        rot = (
-            self.rotLimiter.calculate(
-                wpimath.applyDeadband(self.controller.getRightX(), 0.02)
-            )
-            * drivetrain.kMaxAngularSpeed  # Use kMaxAngularSpeed for rotation
-        )
-
+        
+    def driveWithJoystick(self, fieldRelative: bool):
+        xSpeed = -self.xLimiter.calculate(self.controller.getLeftY()) * drivetrain.kMaxSpeed
+        ySpeed = self.yLimiter.calculate(self.controller.getLeftX()) * drivetrain.kMaxSpeed
+        rot = self.rotLimiter.calculate(self.controller.getRightX()) * drivetrain.kMaxAngularSpeed
         self.swerve.drive(xSpeed, ySpeed, rot, fieldRelative, self.getPeriod())
-
 
 if __name__ == "__main__":
     wpilib.run(MyRobot)

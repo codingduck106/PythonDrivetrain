@@ -13,13 +13,12 @@ from pathplannerlib.controller import PPHolonomicDriveController
 from pathplannerlib.config import RobotConfig, PIDConstants
 from ntcore import NetworkTableInstance
 
-kMaxSpeed = 3.0  # meters/sec
-kMaxAngularSpeed = math.pi  # rad/sec
 
 class Drivetrain(Subsystem):
+    kMaxSpeed = 3.0  # meters/sec
+    kMaxAngularSpeed = math.pi  # rad/sec
     def __init__(self) -> None:
         """Initializes a drivetrain subsystem"""
-
 
         # Module positions
         self.frontLeftLocation = wpimath.geometry.Translation2d(0.381, 0.381)
@@ -136,7 +135,7 @@ class Drivetrain(Subsystem):
         # Discretization of speeds  
         discretized = wpimath.kinematics.ChassisSpeeds.discretize(chassisSpeeds, periodSeconds)
         swerveStates = self.kinematics.toSwerveModuleStates(discretized)
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveStates, kMaxSpeed)
+        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveStates, self.kMaxSpeed)
 
         # initialize swerve modules
         self.frontLeft.setDesiredState(swerveStates[0])
@@ -224,7 +223,7 @@ class Drivetrain(Subsystem):
         :param desiredStates: a tuple containing SwerveModuleState objects containing the desired state for each module."""
         # Desaturate wheel speeds
         wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(
-            desiredStates, kMaxSpeed
+            desiredStates, self.kMaxSpeed
         )
         
         self.frontLeft.setDesiredState(desiredStates[0])

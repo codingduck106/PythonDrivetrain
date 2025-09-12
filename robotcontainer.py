@@ -4,11 +4,14 @@ from ntcore import NetworkTableInstance
 from wpilib import SmartDashboard, DriverStation
 from commands2.instantcommand import InstantCommand
 from constants import *
+from elevator import Elevator
 
 class RobotContainer:
     def __init__(self):
         """Initializes a robot container"""
         self.drive = Drivetrain()
+        # Initialize the elevator with master/follower IDs
+        self.elevator = Elevator(ELEVATOR_1, ELEVATOR_2)
         self.configureBindings()
 
         # Auto chooser

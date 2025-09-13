@@ -2,7 +2,7 @@
 requires = ["robotpy-build", "wpilib", "phoenix6"]
 
 [tool.robotpy]
-robotpy_version = "2024.3.2.2"
+robotpy_version = "2025.3.2.2"
 
 [tool.robotpy.wpilib.simulation]
 # Enable HAL simulation

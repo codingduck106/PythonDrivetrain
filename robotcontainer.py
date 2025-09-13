@@ -1,5 +1,7 @@
-from pathplannerlib.auto import AutoBuilder
-from drivetrain import Drivetrain
+from pathplannerlib.auto import AutoBuilder, RobotConfig
+from pathplannerlib.controller import PPHolonomicDriveController
+from pathplannerlib.config import PIDConstants
+from drivetrain import *
 from ntcore import NetworkTableInstance
 from wpilib import SmartDashboard, DriverStation
 from commands2.instantcommand import InstantCommand
@@ -13,6 +15,22 @@ class RobotContainer:
 
         # Auto chooser
         self.autoChooser = AutoBuilder.buildAutoChooser()
+
+        # AutoBuilder
+        config = RobotConfig.fromGUISettings()
+        AutoBuilder.configure(
+            self.drive.getPose,
+            self.drive.resetPose,
+            self.drive.getRobotRelativeSpeeds,
+            lambda speeds, ff: self.drive.driveRobotRelative(speeds, ff),
+            PPHolonomicDriveController(
+                PIDConstants(5.0, 0.0, 0.0),
+                PIDConstants(5.0, 0.0, 0.0),
+            ),
+            config,
+            self.drive.shouldFlipPath,
+            self.drive,
+        )
 
         # NetworkTables
         nt_instance = NetworkTableInstance.getDefault()

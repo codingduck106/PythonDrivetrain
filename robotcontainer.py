@@ -22,7 +22,7 @@ class RobotContainer:
             self.drive.getPose,
             self.drive.resetPose,
             self.drive.getRobotRelativeSpeeds,
-            lambda speeds, ff: self.drive.driveRobotRelative(speeds, ff),
+            self.drive.driveRobotRelative,
             PPHolonomicDriveController(
                 PIDConstants(5.0, 0.0, 0.0),
                 PIDConstants(5.0, 0.0, 0.0),

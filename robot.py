@@ -13,6 +13,9 @@ class MyRobot(wpilib.TimedRobot):
         self.controller = wpilib.PS4Controller(0)
         self.swerve = self.container.drive
 
+        # Sim pose
+        self.sim_pose = wpimath.geometry.Pose2d()
+
         # Slew rate limiters
         self.xLimiter = wpimath.filter.SlewRateLimiter(3)
         self.yLimiter = wpimath.filter.SlewRateLimiter(3)
@@ -29,19 +32,22 @@ class MyRobot(wpilib.TimedRobot):
 
     def robotPeriodic(self):
         """runs periodically during any of the robot's cycles"""
-        self.swerve.updateOdometry()
+        if not self.isSimulation():
+            self.swerve.updateOdometry()
 
-        # Pose
-        pose = self.swerve.getPose()
-        self.pose_pub.set([pose.X(), pose.Y(), pose.rotation().degrees()])
+            # Pose
+            pose = self.swerve.getPose()
+            self.pose_pub.set([pose.X(), pose.Y(), pose.rotation().degrees()])
 
-        # Chassis speeds
-        speeds = self.swerve.getRobotRelativeSpeeds()
-        self.speeds_pub.set([speeds.vx, speeds.vy, speeds.omega])
+            # Chassis speeds
+            speeds = self.swerve.getRobotRelativeSpeeds()
+            self.speeds_pub.set([speeds.vx, speeds.vy, speeds.omega])
 
-        # Mode
-        mode_str = "Autonomous" if self.isAutonomous() else "Teleop" if self.isTeleop() else "Disabled"
-        self.mode_pub.set(mode_str)
+            # Mode
+            mode_str = "Autonomous" if self.isAutonomous() else "Teleop" if self.isTeleop() else "Disabled"
+            self.mode_pub.set(mode_str)
+        else:
+            pass
 
     def autonomousInit(self):
         """runs when auto begins"""

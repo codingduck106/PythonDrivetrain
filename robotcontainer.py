@@ -13,11 +13,9 @@ class RobotContainer:
         self.drive = Drivetrain()
         self.configureBindings()
 
-        # Auto chooser
-        self.autoChooser = AutoBuilder.buildAutoChooser()
-
         # AutoBuilder
         config = RobotConfig.fromGUISettings()
+
         AutoBuilder.configure(
             self.drive.getPose,
             self.drive.resetPose,
@@ -31,6 +29,11 @@ class RobotContainer:
             self.drive.shouldFlipPath,
             self.drive,
         )
+
+        # Auto chooser
+        self.autoChooser = AutoBuilder.buildAutoChooser()
+
+        
 
         # NetworkTables
         nt_instance = NetworkTableInstance.getDefault()

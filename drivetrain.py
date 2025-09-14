@@ -6,6 +6,7 @@ from pathplannerlib.trajectory import DriveFeedforwards
 from wpimath.kinematics import SwerveModuleState
 from phoenix6.hardware import TalonFX, CANcoder, Pigeon2
 from phoenix6.controls import StaticBrake
+from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration
 from constants import *
 from commands2 import Subsystem
 import wpilib
@@ -36,24 +37,7 @@ class Drivetrain(Subsystem):
         self.frontRightLocation = wpimath.geometry.Translation2d(0.44, -0.44)
         self.backLeftLocation = wpimath.geometry.Translation2d(-0.44, 0.44)
         self.backRightLocation = wpimath.geometry.Translation2d(-0.44, -0.44)
-        
-        # Create swerve modules with updated constructor
-        self.frontLeftC = SwerveModule(TalonFX, TalonFX, CANcoder,
-                                        get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN),
-                                        "swerve",
-                                        0, 0)
-        self.frontRightC = SwerveModule(TalonFX, TalonFX, CANcoder,
-                                        get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN),
-                                        "swerve",
-                                        0, 1)
-        self.backLeftC = SwerveModule(TalonFX, TalonFX, CANcoder,
-                                        get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN),
-                                        "swerve",
-                                        0, 2)
-        self.backRightC = SwerveModule(TalonFX, TalonFX, CANcoder,
-                                        get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN),
-                                        "swerve",
-                                        0, 3)
+
 
         # Use Pigeon2 instead of AnalogGyro for better performance
         self.gyro = Pigeon2(GYRO, "swerve")
@@ -71,6 +55,7 @@ class Drivetrain(Subsystem):
                                                     get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN),
                                                     get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN)
                                                 ])
+        self.frontLeft, self.frontRight, self.backLeft, self.backRight = [module for module in self.drivetrainC.modules]
 
         # Simulation drivetrain
         self.sim_drivetrain = SimSwerveDrivetrain([self.frontLeftLocation,
@@ -258,10 +243,33 @@ def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int):
     :param canCoderId: CAN ID for the CANCoder
     :returns: `SwerveModuleConstants` object with wheel and gear ratio parameters
     """
+    driveConfig = TalonFXConfiguration()
+    driveConfig.slot0.k_p = 2.5
+    driveConfig.slot0.k_i = 0
+    driveConfig.slot0.k_d = 0
+    driveConfig.slot0.k_s = 6.4111
+    driveConfig.slot0.k_v = 0.087032
+    driveConfig.slot0.k_a = 0
+
+    driveConfig.feedback.sensor_to_mechanism_ratio = kDriveGearRatio
+
+    turnConfig = TalonFXConfiguration()
+    turnConfig.slot0.k_p = 50
+    turnConfig.slot0.k_i = 0
+    turnConfig.slot0.k_d = 3.0889
+    turnConfig.slot0.k_s = 0.21041
+    turnConfig.slot0.k_v = 2.68
+    turnConfig.slot0.k_a = 0.084645 
+
+    turnConfig.feedback.sensor_to_mechanism_ratio = kTurnGearRatio
+
     return (SwerveModuleConstants()
                         .with_drive_motor_id(driveMotorId)
                         .with_steer_motor_id(turnMotorId)
                         .with_encoder_id(canCoderId)
                         .with_drive_motor_gear_ratio(kDriveGearRatio)
                         .with_steer_motor_gear_ratio(kTurnGearRatio)
-                        .with_wheel_radius(kWheelRadius))
+                        .with_wheel_radius(kWheelRadius)
+                        .with_drive_motor_initial_configs(driveConfig)
+                        .with_steer_motor_initial_configs(turnConfig)
+                        .with_encoder_initial_configs(CANcoderConfiguration()))

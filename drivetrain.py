@@ -343,7 +343,7 @@ def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int, i
     :returns: `SwerveModuleConstants` object with wheel and gear ratio parameters
     """
 
-    offsets = [-0.240234, -0.011475, -0.108887, -0.148438]
+    # offsets = [-0.240234, -0.011475, -0.108887, -0.148438]
 
     driveConfig = TalonFXConfiguration()
     driveConfig.slot0.k_p = 2.5
@@ -383,4 +383,5 @@ def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int, i
                         .with_steer_motor_closed_loop_output(ClosedLoopOutputType.VOLTAGE)
                         .with_feedback_source(SteerFeedbackType.FUSED_CANCODER)
                         .with_coupling_gear_ratio(3.5)
-                        .with_encoder_offset(offsets[index]))
+                        # .with_encoder_offset(offsets[index])
+                        )

@@ -16,9 +16,12 @@ kMaxSpeed = 3.0  # meters/sec
 kMaxAngularSpeed = math.pi  # rad/sec
 kWheelRadius = 0.0390398  # measured in meters
 kDriveGearRatio = 6.75  # Motor rotations per wheel rotation
-kTurnGearRatio = 150.0/7   # Motor rotations per module rotation
+kTurnGearRatio = 150.0 / 7   # Motor rotations per module rotation
 kModuleMaxAngularVelocity = math.pi
 kModuleMaxAngularAcceleration = math.tau
+FRONT_DIST = 0.4064
+LEFT_DIST = 0.3302
+
 
 class Drivetrain(Subsystem):
     """
@@ -33,10 +36,10 @@ class Drivetrain(Subsystem):
         Sets up swerve modules, gyro, kinematics, odometry, and NetworkTables telemetry.
         """
         # Module positions
-        self.frontLeftLocation = wpimath.geometry.Translation2d(0.44, 0.44)
-        self.frontRightLocation = wpimath.geometry.Translation2d(0.44, -0.44)
-        self.backLeftLocation = wpimath.geometry.Translation2d(-0.44, 0.44)
-        self.backRightLocation = wpimath.geometry.Translation2d(-0.44, -0.44)
+        self.frontLeftLocation = wpimath.geometry.Translation2d(FRONT_DIST, LEFT_DIST)
+        self.frontRightLocation = wpimath.geometry.Translation2d(FRONT_DIST, -LEFT_DIST)
+        self.backLeftLocation = wpimath.geometry.Translation2d(-FRONT_DIST, LEFT_DIST)
+        self.backRightLocation = wpimath.geometry.Translation2d(-FRONT_DIST, -LEFT_DIST)
 
 
         # Use Pigeon2 instead of AnalogGyro for better performance
@@ -49,10 +52,10 @@ class Drivetrain(Subsystem):
         self.drivetrainC = SwerveDrivetrain(TalonFX, TalonFX, CANcoder,
                                              self.drivetrain_constants,
                                                 [
-                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN),
-                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN),
-                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN),
-                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN)
+                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, 0),
+                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN, 1),
+                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, 2),
+                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, 3)
                                                 ])
         for i in range(4):
             (self.drivetrainC.get_module(i)
@@ -94,10 +97,10 @@ class Drivetrain(Subsystem):
                                                     self.backRightLocation],
                                                    self.sim_gyro,
                                                      [
-                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN),
-                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN),
-                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN),
-                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN)
+                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, 0),
+                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN, 1),
+                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, 2),
+                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, 3)
                                                     ])
 
 
@@ -159,9 +162,7 @@ class Drivetrain(Subsystem):
         )
         wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveStates, kMaxSpeed)  # type: ignore
 
-        for i, module in enumerate(self.drivetrainC.modules):
-            module_request = module.ModuleRequest().with_state(swerveStates[i])
-            module.apply(module_request)
+        self.setModuleStates(swerveStates) # type: ignore
 
     def driveRobotRelative(self, speeds: wpimath.kinematics.ChassisSpeeds, feedforward: DriveFeedforwards):
         """
@@ -227,13 +228,30 @@ class Drivetrain(Subsystem):
 
         :param desiredStates: tuple containing desired `SwerveModuleState` for each module
         """
-        desiredStates = wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(
+        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(
             desiredStates, kMaxSpeed
         )
         for i, module in enumerate(self.drivetrainC.modules):
-            desiredStates[i].optimize(module.get_current_state().angle)
-            module_request = module.ModuleRequest().with_state(desiredStates[i])
+            new_desiredState = self.optimize(desiredStates[i], module.get_current_state().angle)
+            module_request = module.ModuleRequest().with_state(new_desiredState)
             module.apply(module_request)
+
+    def optimize(self, state: SwerveModuleState, currentAngle: wpimath.geometry.Rotation2d) -> SwerveModuleState:
+        """
+        Returns a new optimized state to minimize rotation delta.
+        If the desired angle is more than 90° away, the wheel direction is reversed.
+        """
+        delta = state.angle.radians() - currentAngle.radians()
+        # Normalize to [-pi, pi]
+        delta = math.atan2(math.sin(delta), math.cos(delta))
+
+        if abs(delta) > math.pi / 2:
+            # Flip the wheel direction and rotate angle by 180°
+            flipped_speed = -state.speed
+            flipped_angle = state.angle + wpimath.geometry.Rotation2d(math.pi)
+            return SwerveModuleState(flipped_speed, flipped_angle)
+        else:
+            return state
 
     def getRobotRelativeSpeeds(self):
         """
@@ -244,7 +262,7 @@ class Drivetrain(Subsystem):
         return self.drivetrainC.kinematics.toChassisSpeeds(self.getModuleStates())  # type: ignore
 
 
-def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int):
+def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int, index: int):
     """
     Create and return a SwerveModuleConstants object.
 
@@ -253,6 +271,9 @@ def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int):
     :param canCoderId: CAN ID for the CANCoder
     :returns: `SwerveModuleConstants` object with wheel and gear ratio parameters
     """
+
+    offsets = [-0.240234, -0.011475, -0.108887, -0.148438]
+
     driveConfig = TalonFXConfiguration()
     driveConfig.slot0.k_p = 2.5
     driveConfig.slot0.k_i = 0
@@ -290,4 +311,5 @@ def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int):
                         .with_drive_motor_closed_loop_output(ClosedLoopOutputType.TORQUE_CURRENT_FOC)
                         .with_steer_motor_closed_loop_output(ClosedLoopOutputType.VOLTAGE)
                         .with_feedback_source(SteerFeedbackType.FUSED_CANCODER)
-                        .with_coupling_gear_ratio(3.5))
+                        .with_coupling_gear_ratio(3.5)
+                        .with_encoder_offset(offsets[index]))

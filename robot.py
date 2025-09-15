@@ -9,12 +9,10 @@ class MyRobot(wpilib.TimedRobot):
     """2813 :D"""
     def robotInit(self):
         """Robot initialization"""
-        self.container = RobotContainer()
-        self.controller = wpilib.PS4Controller(0)
+        self.container = RobotContainer(self.isSimulation())
+        self.drive_controller = wpilib.PS4Controller(0)
+        self.steer_controller = wpilib.PS4Controller(1)
         self.swerve = self.container.drive
-
-        # Sim pose
-        self.sim_pose = wpimath.geometry.Pose2d()
 
         # Slew rate limiters
         self.xLimiter = wpimath.filter.SlewRateLimiter(3)
@@ -32,14 +30,23 @@ class MyRobot(wpilib.TimedRobot):
 
     def robotPeriodic(self):
         """runs periodically during any of the robot's cycles"""
-        self.swerve.updateOdometry()
 
-        # Pose
-        pose = self.swerve.getPose()
+        period = self.getPeriod()
+        if self.isSimulation():
+            self.swerve.update_pose_sim(period)
+            pose = self.swerve.getPoseSim()
+            speeds = self.swerve.getRobotRelativeSpeeds()
+        else:
+            self.swerve.updateOdometry()
+
+            # Pose
+            pose = self.swerve.getPose()
+
+            # Chassis Speeds
+            speeds = self.swerve.getRobotRelativeSpeeds()
+
+
         self.pose_pub.set([pose.X(), pose.Y(), pose.rotation().degrees()])
-
-        # Chassis speeds
-        speeds = self.swerve.getRobotRelativeSpeeds()
         self.speeds_pub.set([speeds.vx, speeds.vy, speeds.omega])
 
         # Mode
@@ -48,20 +55,24 @@ class MyRobot(wpilib.TimedRobot):
 
     def autonomousInit(self):
         """runs when auto begins"""
-        # self.autoCommand = self.container.getAutonomousCommand()
-        # if self.autoCommand:
-        #     self.autoCommand.schedule()
+        self.autoCommand = self.container.getAutonomousCommand()
+        if self.autoCommand:
+            self.autoCommand.schedule()
 
     def teleopPeriodic(self):
         """runs during teleop"""
-        self.driveWithJoystick(True)
+        self.driveWithJoystick(self.isSimulation(), True)
         
-    def driveWithJoystick(self, fieldRelative: bool):
+    def driveWithJoystick(self, sim: bool, fieldRelative: bool):
         """code to handle driving with the joystick"""
-        xSpeed = -self.xLimiter.calculate(self.controller.getLeftY()) * drivetrain.kMaxSpeed
-        ySpeed = self.yLimiter.calculate(self.controller.getLeftX()) * drivetrain.kMaxSpeed
-        rot = self.rotLimiter.calculate(self.controller.getRightX()) * drivetrain.kMaxAngularSpeed
-        self.swerve.drive(xSpeed, ySpeed, rot, fieldRelative, self.getPeriod())
+        xSpeed = -self.xLimiter.calculate(self.drive_controller.getLeftY()) * drivetrain.kMaxSpeed
+        ySpeed = -self.yLimiter.calculate(self.drive_controller.getLeftX()) * drivetrain.kMaxSpeed
+        rot = self.rotLimiter.calculate(self.steer_controller.getLeftX()) * drivetrain.kMaxAngularSpeed
+
+        if sim:
+            self.swerve.driveSim(xSpeed, ySpeed, rot / 45, self.getPeriod(), fieldRelative)
+        else:
+            self.swerve.drive(xSpeed, ySpeed, rot, fieldRelative, self.getPeriod())
 
     def disabledInit(self):
         """runs when robot is disabled"""

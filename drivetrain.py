@@ -29,7 +29,7 @@ class Drivetrain(Subsystem):
     Handles module initialization, kinematics, odometry, telemetry, and driving.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, sim: bool) -> None:
         """
         Initializes the drivetrain subsystem.
 
@@ -102,7 +102,13 @@ class Drivetrain(Subsystem):
                                                     get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, 2),
                                                     get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, 3)
                                                     ])
+        
+        self.sim_pose = wpimath.geometry.Pose2d()
+        self.sim_rotation = wpimath.geometry.Rotation2d()
 
+        self.sim_module_states = [SwerveModuleState(0, wpimath.geometry.Rotation2d()) for _ in range(4)]
+
+        self.sim = sim
 
     # ---------------------- Basic Methods ----------------------
     def getRotation2d(self) -> wpimath.geometry.Rotation2d:
@@ -119,7 +125,7 @@ class Drivetrain(Subsystem):
 
         :returns: `Pose2d` object representing current position and orientation
         """
-        return self.drivetrainC.get_state().pose
+        return self.drivetrainC.get_state().pose if not self.sim else self.getPoseSim()
 
     def shouldFlipPath(self) -> bool:
         """
@@ -137,7 +143,12 @@ class Drivetrain(Subsystem):
         """
         if pose is None:
             pose = wpimath.geometry.Pose2d()
-        self.drivetrainC.reset_pose(pose)
+        if self.sim:
+            self.sim_pose = pose
+            self.sim_rotation = pose.rotation()
+        else:
+
+            self.drivetrainC.reset_pose(pose)
 
     # ---------------------- Driving ----------------------
     def drive(self, xSpeed, ySpeed, rot, fieldRelative: bool, periodSeconds: float):
@@ -259,7 +270,67 @@ class Drivetrain(Subsystem):
 
         :returns: `ChassisSpeeds` object
         """
-        return self.drivetrainC.kinematics.toChassisSpeeds(self.getModuleStates())  # type: ignore
+        if not self.sim:
+            return self.drivetrainC.kinematics.toChassisSpeeds(self.getModuleStates()) # type: ignore
+        else:
+            return self.kinematics.toChassisSpeeds(tuple(self.sim_module_states)) # type: ignore
+    
+
+    # SIMULATION METHODS
+    
+    def driveSim(self, xSpeed: float, ySpeed: float, rot: float, period: float, fieldRelative: bool = True):
+        """
+        Update module states and robot pose purely in simulation.
+        
+        :param xSpeed: m/s forward
+        :param ySpeed: m/s sideways
+        :param rot: radians/s rotation
+        :param period: loop delta time
+        :param fieldRelative: True if speeds are field relative"""
+
+        if fieldRelative:
+            chassisSpeeds = wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(xSpeed, ySpeed, rot, self.sim_rotation)
+        else:
+            chassisSpeeds = wpimath.kinematics.ChassisSpeeds(xSpeed, ySpeed, rot)
+
+        states = self.kinematics.toSwerveModuleStates(chassisSpeeds)
+        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(states, kMaxSpeed)
+
+        for i in range(4):
+            self.sim_module_states[i] = self.optimize(states[i], self.sim_module_states[i].angle)
+
+        self.update_pose_sim(period)
+
+
+    def update_pose_sim(self, period: float):
+        chassisSpeeds = self.kinematics.toChassisSpeeds(self.sim_module_states) # type: ignore
+
+        dx = chassisSpeeds.vx * period
+        dy = chassisSpeeds.vy * period
+        dtheta = chassisSpeeds.omega * period
+        
+        cos_r = math.cos(self.sim_rotation.radians())
+        sin_r = math.sin(self.sim_rotation.radians())
+        self.sim_pose = wpimath.geometry.Pose2d(
+            self.sim_pose.X() + dx * cos_r - dy * sin_r,
+            self.sim_pose.Y() + dx * sin_r + dy * cos_r,
+            self.sim_pose.rotation().rotateBy(wpimath.geometry.Rotation2d(dtheta))
+        )
+
+        self.sim_rotation = self.sim_pose.rotation()
+        self.sim_gyro.set_raw_yaw(self.sim_rotation.degrees())
+
+    def teleopPeriodicSim(self, xInput, yInput, rotInput, period):
+        xSpeed = xInput * kMaxSpeed
+        ySpeed = yInput * kMaxSpeed
+        rot = rotInput * kMaxAngularSpeed
+        self.driveSim(xSpeed, ySpeed, rot, period)
+
+    def getModuleStatesSim(self):
+        return tuple(self.sim_module_states) # type: ignore
+
+    def getPoseSim(self):
+        return self.sim_pose
 
 
 def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int, index: int):

@@ -10,9 +10,9 @@ from commands2.instantcommand import InstantCommand
 from constants import *
 
 class RobotContainer:
-    def __init__(self):
+    def __init__(self, sim: bool):
         """Initializes a robot container"""
-        self.drive = Drivetrain()
+        self.drive = Drivetrain(sim)
         self.configureBindings()
 
         config = RobotConfig.fromGUISettings()

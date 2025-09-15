@@ -3,7 +3,7 @@ from pathplannerlib.controller import PPHolonomicDriveController
 from pathplannerlib.config import PIDConstants
 from drivetrain import *
 from ntcore import NetworkTableInstance
-from wpilib import SmartDashboard, DriverStation
+from wpilib import SmartDashboard
 from commands2.instantcommand import InstantCommand
 from constants import *
 

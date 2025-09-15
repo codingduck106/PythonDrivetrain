@@ -1,12 +1,12 @@
 import math
 import wpimath.geometry
-from phoenix6.swerve import SwerveModule, SwerveDrivetrain, SwerveDrivetrainConstants, SimSwerveDrivetrain, SwerveModuleConstants
+from phoenix6.swerve import SwerveDrivetrain, SwerveDrivetrainConstants, SimSwerveDrivetrain, SwerveModuleConstants, ClosedLoopOutputType, SteerFeedbackType
 import wpimath.kinematics
 from pathplannerlib.trajectory import DriveFeedforwards
 from wpimath.kinematics import SwerveModuleState
 from phoenix6.hardware import TalonFX, CANcoder, Pigeon2
 from phoenix6.controls import StaticBrake
-from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration
+from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration, CurrentLimitsConfigs
 from constants import *
 from commands2 import Subsystem
 import wpilib
@@ -14,9 +14,9 @@ from ntcore import NetworkTableInstance
 
 kMaxSpeed = 3.0  # meters/sec
 kMaxAngularSpeed = math.pi  # rad/sec
-kWheelRadius = 0.053975  # measured in meters
+kWheelRadius = 0.0390398  # measured in meters
 kDriveGearRatio = 6.75  # Motor rotations per wheel rotation
-kTurnGearRatio = 12.8   # Motor rotations per module rotation
+kTurnGearRatio = 150.0/7   # Motor rotations per module rotation
 kModuleMaxAngularVelocity = math.pi
 kModuleMaxAngularAcceleration = math.tau
 
@@ -41,7 +41,6 @@ class Drivetrain(Subsystem):
 
         # Use Pigeon2 instead of AnalogGyro for better performance
         self.gyro = Pigeon2(GYRO, "swerve")
-        self.sim_gyro = self.gyro.sim_state
 
         # Swerve drivetrain constants
         self.drivetrain_constants = (SwerveDrivetrainConstants()
@@ -55,20 +54,14 @@ class Drivetrain(Subsystem):
                                                     get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN),
                                                     get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN)
                                                 ])
+        for i in range(4):
+            (self.drivetrainC.get_module(i)
+             .drive_motor
+             .configurator.apply(CurrentLimitsConfigs()
+                                 .with_supply_current_limit(60)
+                                 .with_supply_current_limit_enable(True)
+                                 .with_stator_current_limit_enable(False)))
         self.frontLeft, self.frontRight, self.backLeft, self.backRight = [module for module in self.drivetrainC.modules]
-
-        # Simulation drivetrain
-        self.sim_drivetrain = SimSwerveDrivetrain([self.frontLeftLocation,
-                                                    self.frontRightLocation,
-                                                    self.backLeftLocation,
-                                                    self.backRightLocation],
-                                                   self.sim_gyro,
-                                                     [
-                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN),
-                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN),
-                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN),
-                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN)
-                                                    ])
 
         # Kinematics and odometry
         self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(
@@ -90,6 +83,23 @@ class Drivetrain(Subsystem):
         self.nt_table = nt_instance.getTable("SmartDashboard")
         self.pose_topic = self.nt_table.getDoubleArrayTopic("DrivetrainPose").publish()
         self.module_states_topic = self.nt_table.getDoubleArrayTopic("DrivetrainModuleStates").publish()
+
+        # sim gyro
+        self.sim_gyro = self.gyro.sim_state
+
+        # Simulation drivetrain
+        self.sim_drivetrain = SimSwerveDrivetrain([self.frontLeftLocation,
+                                                    self.frontRightLocation,
+                                                    self.backLeftLocation,
+                                                    self.backRightLocation],
+                                                   self.sim_gyro,
+                                                     [
+                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN),
+                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN),
+                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN),
+                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN)
+                                                    ])
+
 
     # ---------------------- Basic Methods ----------------------
     def getRotation2d(self) -> wpimath.geometry.Rotation2d:
@@ -272,4 +282,12 @@ def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int):
                         .with_wheel_radius(kWheelRadius)
                         .with_drive_motor_initial_configs(driveConfig)
                         .with_steer_motor_initial_configs(turnConfig)
-                        .with_encoder_initial_configs(CANcoderConfiguration()))
+                        .with_encoder_initial_configs(CANcoderConfiguration())
+                        .with_drive_motor_gains(driveConfig.slot0)
+                        .with_steer_motor_gains(turnConfig.slot0)
+                        .with_speed_at12_volts(6)
+                        .with_slip_current(90)
+                        .with_drive_motor_closed_loop_output(ClosedLoopOutputType.TORQUE_CURRENT_FOC)
+                        .with_steer_motor_closed_loop_output(ClosedLoopOutputType.VOLTAGE)
+                        .with_feedback_source(SteerFeedbackType.FUSED_CANCODER)
+                        .with_coupling_gear_ratio(3.5))

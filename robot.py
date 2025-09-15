@@ -48,9 +48,9 @@ class MyRobot(wpilib.TimedRobot):
 
     def autonomousInit(self):
         """runs when auto begins"""
-        self.autoCommand = self.container.getAutonomousCommand()
-        if self.autoCommand:
-            self.autoCommand.schedule()
+        # self.autoCommand = self.container.getAutonomousCommand()
+        # if self.autoCommand:
+        #     self.autoCommand.schedule()
 
     def teleopPeriodic(self):
         """runs during teleop"""

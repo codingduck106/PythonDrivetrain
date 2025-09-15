@@ -67,7 +67,7 @@ class MyRobot(wpilib.TimedRobot):
         """code to handle driving with the joystick"""
         xSpeed = -self.xLimiter.calculate(self.drive_controller.getLeftY()) * drivetrain.kMaxSpeed
         ySpeed = -self.yLimiter.calculate(self.drive_controller.getLeftX()) * drivetrain.kMaxSpeed
-        rot = self.rotLimiter.calculate(self.steer_controller.getLeftX()) * drivetrain.kMaxAngularSpeed
+        rot = -self.rotLimiter.calculate(self.steer_controller.getLeftX()) * drivetrain.kMaxAngularSpeed
 
         if sim:
             self.swerve.driveSim(xSpeed, ySpeed, rot / 45, self.getPeriod(), fieldRelative)

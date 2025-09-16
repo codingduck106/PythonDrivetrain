@@ -3,6 +3,7 @@ import wpimath.filter
 from drivetrain import Drivetrain
 from ntcore import NetworkTableInstance
 from robotcontainer import RobotContainer
+from wpilib import DriverStation
 import math
 
 class MyRobot(wpilib.TimedRobot):
@@ -10,7 +11,8 @@ class MyRobot(wpilib.TimedRobot):
     
     def robotInit(self):
         """Robot initialization"""
-        self.container = RobotContainer(self.isSimulation())
+        self.alliance = DriverStation.getAlliance()
+        self.container = RobotContainer(self.alliance)
         self.controller = wpilib.PS4Controller(0)
         self.swerve = self.container.drive
         
@@ -39,6 +41,10 @@ class MyRobot(wpilib.TimedRobot):
     def robotPeriodic(self):
         """Runs periodically - REDUCED telemetry frequency"""
         
+        self.swerve.drivetrain.set_control(self.swerve.get_request(self.controller.getLeftX(),
+                                                                   self.controller.getLeftY(),
+                                                                   self.controller.getRightX()))
+
         # Only update telemetry every 5th cycle (100ms instead of 20ms)
         self.telemetry_counter += 1
         if self.telemetry_counter >= 5:

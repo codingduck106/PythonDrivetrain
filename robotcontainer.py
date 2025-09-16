@@ -12,9 +12,9 @@ from constants import *
 class RobotContainer:
     """Fixed robot container to prevent command conflicts"""
     
-    def __init__(self, sim: bool):
+    def __init__(self, alliance: wpilib.DriverStation.Alliance | None):
         """Initialize with conflict prevention"""
-        self.drive = Drivetrain()  # Use the fixed drivetrain
+        self.drive = Drivetrain(alliance if alliance else wpilib.DriverStation.getAlliance())  # Use the fixed drivetrain
         self.configureBindings()
         
         # PathPlanner setup - but with better isolation

@@ -9,6 +9,8 @@ from phoenix6.swerve import (
 from phoenix6.hardware import TalonFX, CANcoder, Pigeon2
 from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration, CurrentLimitsConfigs
 from phoenix6.controls import VelocityVoltage, PositionVoltage, StaticBrake
+from phoenix6.units import second
+from phoenix6.swerve.requests import *
 from commands2 import Subsystem
 import wpilib
 import wpimath.kinematics
@@ -30,10 +32,9 @@ class Drivetrain(Subsystem):
     Phoenix 6 swerve drivetrain with direct motor control instead of requests.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, alliance: wpilib.DriverStation.Alliance | None) -> None:
         """Initialize the Phoenix 6 swerve drivetrain."""
-        super().__init__()
-        
+        self.alliance = alliance
         # Create drivetrain constants
         self.drivetrain_constants = (
             SwerveDrivetrainConstants()
@@ -76,8 +77,7 @@ class Drivetrain(Subsystem):
             .with_stator_current_limit_enable(False)
         )
         
-        for i in range(4):
-            self.drivetrain.get_module(i).drive_motor.configurator.apply(current_limits)
+        for i in range(4): self.drivetrain.get_module(i).drive_motor.configurator.apply(current_limits)
         
         # Create control objects for direct motor control
         self.drive_velocity_control = VelocityVoltage(0)
@@ -100,6 +100,26 @@ class Drivetrain(Subsystem):
         # NetworkTables for telemetry
         nt_instance = NetworkTableInstance.getDefault()
         self.nt_table = nt_instance.getTable("SmartDashboard")
+
+        self.drivetrain.set_operator_perspective_forward(Rotation2d(0) if self.alliance == wpilib.DriverStation.Alliance.kBlue else Rotation2d(math.pi))
+
+    def get_request(self, xSpeed: meters_per_second, ySpeed: meters_per_second, rot: radians_per_second) -> FieldCentric:
+        req = (FieldCentric()
+               .with_velocity_x(xSpeed)
+               .with_velocity_y(ySpeed)
+               .with_rotational_rate(rot)
+               .with_rotational_deadband(0.07)
+               .with_forward_perspective(ForwardPerspectiveValue.OPERATOR_PERSPECTIVE))
+        return req
+    
+    def get_request_speeds(self, speeds: ChassisSpeeds):
+        req = (FieldCentric()
+               .with_velocity_x(speeds.vx)
+               .with_velocity_y(speeds.vy)
+               .with_rotational_rate(speeds.omega)
+               .with_rotational_deadband(0.07)
+               .with_forward_perspective(ForwardPerspectiveValue.OPERATOR_PERSPECTIVE))
+        
 
     def create_module_constants(self, drive_id: int, turn_id: int, encoder_id: int, encoder_offset: float):
         """Create module constants for a single swerve module."""

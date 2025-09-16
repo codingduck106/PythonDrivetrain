@@ -1,387 +1,388 @@
 import math
-import wpimath.geometry
-from phoenix6.swerve import SwerveDrivetrain, SwerveDrivetrainConstants, SimSwerveDrivetrain, SwerveModuleConstants, ClosedLoopOutputType, SteerFeedbackType
-import wpimath.kinematics
-from pathplannerlib.trajectory import DriveFeedforwards
-from wpimath.kinematics import SwerveModuleState
+from phoenix6.swerve import (
+    SwerveDrivetrain, 
+    SwerveDrivetrainConstants, 
+    SwerveModuleConstants,
+    ClosedLoopOutputType, 
+    SteerFeedbackType
+)
 from phoenix6.hardware import TalonFX, CANcoder, Pigeon2
-from phoenix6.controls import StaticBrake
 from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration, CurrentLimitsConfigs
-from constants import *
+from phoenix6.controls import VelocityVoltage, PositionVoltage, StaticBrake
 from commands2 import Subsystem
 import wpilib
+import wpimath.kinematics
+import wpimath.geometry
 from ntcore import NetworkTableInstance
+from constants import *
 
-kMaxSpeed = 3.0  # meters/sec
-kMaxAngularSpeed = math.pi  # rad/sec
-kWheelRadius = 0.0390398  # measured in meters
-kDriveGearRatio = 6.75  # Motor rotations per wheel rotation
-kTurnGearRatio = 150.0 / 7   # Motor rotations per module rotation
-kModuleMaxAngularVelocity = math.pi
-kModuleMaxAngularAcceleration = math.tau
+# Constants - adjust these to match your robot
+kMaxSpeed = 6.0  # Phoenix 6 typically uses higher speeds (m/s)
+kMaxAngularSpeed = 2 * math.pi  # rad/sec
+kWheelRadius = 0.0390398  # meters
+kDriveGearRatio = 6.75
+kTurnGearRatio = 150.0 / 7
 FRONT_DIST = 0.4064
 LEFT_DIST = 0.3302
 
-
 class Drivetrain(Subsystem):
     """
-    Drivetrain subsystem class for a swerve drive robot.
-    Handles module initialization, kinematics, odometry, telemetry, and driving.
+    Phoenix 6 swerve drivetrain with direct motor control instead of requests.
     """
 
-    def __init__(self, sim: bool) -> None:
-        """
-        Initializes the drivetrain subsystem.
-
-        Sets up swerve modules, gyro, kinematics, odometry, and NetworkTables telemetry.
-        """
-        # Module positions
-        self.frontLeftLocation = wpimath.geometry.Translation2d(FRONT_DIST, LEFT_DIST)
-        self.frontRightLocation = wpimath.geometry.Translation2d(FRONT_DIST, -LEFT_DIST)
-        self.backLeftLocation = wpimath.geometry.Translation2d(-FRONT_DIST, LEFT_DIST)
-        self.backRightLocation = wpimath.geometry.Translation2d(-FRONT_DIST, -LEFT_DIST)
-
-
-        # Use Pigeon2 instead of AnalogGyro for better performance
-        self.gyro = Pigeon2(GYRO, "swerve")
-
-        # Swerve drivetrain constants
-        self.drivetrain_constants = (SwerveDrivetrainConstants()
-                                              .with_can_bus_name("swerve")
-                                                .with_pigeon2_id(self.gyro.device_id))
-        self.drivetrainC = SwerveDrivetrain(TalonFX, TalonFX, CANcoder,
-                                             self.drivetrain_constants,
-                                                [
-                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, 0),
-                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN, 1),
-                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, 2),
-                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, 3)
-                                                ])
+    def __init__(self) -> None:
+        """Initialize the Phoenix 6 swerve drivetrain."""
+        super().__init__()
+        
+        # Create drivetrain constants
+        self.drivetrain_constants = (
+            SwerveDrivetrainConstants()
+            .with_can_bus_name("swerve")
+            .with_pigeon2_id(GYRO)
+        )
+        
+        # Create module constants for all 4 modules
+        module_constants = [
+            self.create_module_constants(
+                FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, 
+                FLConstants.OFFSET
+            ),
+            self.create_module_constants(
+                FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN,
+                FRConstants.OFFSET
+            ),
+            self.create_module_constants(
+                BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN,
+                BLConstants.OFFSET
+            ),
+            self.create_module_constants(
+                BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN,
+                BRConstants.OFFSET
+            )
+        ]
+        
+        # Create the Phoenix 6 swerve drivetrain
+        self.drivetrain = SwerveDrivetrain(
+            TalonFX, TalonFX, CANcoder,
+            self.drivetrain_constants,
+            module_constants
+        )
+        
+        # Apply current limits to all drive motors
+        current_limits = (
+            CurrentLimitsConfigs()
+            .with_supply_current_limit(60)
+            .with_supply_current_limit_enable(True)
+            .with_stator_current_limit_enable(False)
+        )
+        
         for i in range(4):
-            (self.drivetrainC.get_module(i)
-             .drive_motor
-             .configurator.apply(CurrentLimitsConfigs()
-                                 .with_supply_current_limit(60)
-                                 .with_supply_current_limit_enable(True)
-                                 .with_stator_current_limit_enable(False)))
-        self.frontLeft, self.frontRight, self.backLeft, self.backRight = [module for module in self.drivetrainC.modules]
-
-        # Kinematics and odometry
+            self.drivetrain.get_module(i).drive_motor.configurator.apply(current_limits)
+        
+        # Create control objects for direct motor control
+        self.drive_velocity_control = VelocityVoltage(0)
+        self.steer_position_control = PositionVoltage(0)
+        self.brake_control = StaticBrake()
+        
+        # Create WPILib kinematics for manual control
+        self.front_left_location = wpimath.geometry.Translation2d(FRONT_DIST, LEFT_DIST)
+        self.front_right_location = wpimath.geometry.Translation2d(FRONT_DIST, -LEFT_DIST)
+        self.back_left_location = wpimath.geometry.Translation2d(-FRONT_DIST, LEFT_DIST)
+        self.back_right_location = wpimath.geometry.Translation2d(-FRONT_DIST, -LEFT_DIST)
+        
         self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(
-            self.frontLeftLocation,
-            self.frontRightLocation,
-            self.backLeftLocation,
-            self.backRightLocation,
+            self.front_left_location,
+            self.front_right_location,
+            self.back_left_location,
+            self.back_right_location
         )
-        self.odometry = wpimath.kinematics.SwerveDrive4Odometry(
-            self.kinematics,
-            self.getRotation2d(),
-            tuple([
-                module.get_position(True) for module in self.drivetrainC.modules
-            ]),  # type: ignore
-        )
-
-        # NetworkTables telemetry
+        
+        # NetworkTables for telemetry
         nt_instance = NetworkTableInstance.getDefault()
         self.nt_table = nt_instance.getTable("SmartDashboard")
-        self.pose_topic = self.nt_table.getDoubleArrayTopic("DrivetrainPose").publish()
-        self.module_states_topic = self.nt_table.getDoubleArrayTopic("DrivetrainModuleStates").publish()
 
-        # sim gyro
-        self.sim_gyro = self.gyro.sim_state
-
-        # Simulation drivetrain
-        self.sim_drivetrain = SimSwerveDrivetrain([self.frontLeftLocation,
-                                                    self.frontRightLocation,
-                                                    self.backLeftLocation,
-                                                    self.backRightLocation],
-                                                   self.sim_gyro,
-                                                     [
-                                                    get_module_constants(FLConstants.DRIVE, FLConstants.TURN, FLConstants.CAN, 0),
-                                                    get_module_constants(FRConstants.DRIVE, FRConstants.TURN, FRConstants.CAN, 1),
-                                                    get_module_constants(BLConstants.DRIVE, BLConstants.TURN, BLConstants.CAN, 2),
-                                                    get_module_constants(BRConstants.DRIVE, BRConstants.TURN, BRConstants.CAN, 3)
-                                                    ])
+    def create_module_constants(self, drive_id: int, turn_id: int, encoder_id: int, encoder_offset: float):
+        """Create module constants for a single swerve module."""
         
-        self.sim_pose = wpimath.geometry.Pose2d()
-        self.sim_rotation = wpimath.geometry.Rotation2d()
+        # Drive motor configuration
+        drive_config = TalonFXConfiguration()
+        drive_config.slot0.k_p = 3.0
+        drive_config.slot0.k_i = 0.0
+        drive_config.slot0.k_d = 0.0
+        drive_config.slot0.k_s = 0.1
+        drive_config.slot0.k_v = 0.12
+        drive_config.slot0.k_a = 0.0
+        
+        # Turn motor configuration - LOWERED GAINS
+        turn_config = TalonFXConfiguration()
+        turn_config.slot0.k_p = 20.0  # Much lower than 100
+        turn_config.slot0.k_i = 0.0
+        turn_config.slot0.k_d = 0.0   # Start with 0 D term
+        turn_config.slot0.k_s = 0.0
+        turn_config.slot0.k_v = 1.5
+        turn_config.slot0.k_a = 0.0
+        
+        # CANCoder configuration
+        encoder_config = CANcoderConfiguration()
+        encoder_config.magnet_sensor.absolute_sensor_discontinuity_point = 1
+        encoder_config.magnet_sensor.magnet_offset = encoder_offset
+        
+        return (
+            SwerveModuleConstants()
+            .with_drive_motor_id(drive_id)
+            .with_steer_motor_id(turn_id)
+            .with_encoder_id(encoder_id)
+            .with_drive_motor_gear_ratio(kDriveGearRatio)
+            .with_steer_motor_gear_ratio(kTurnGearRatio) 
+            .with_wheel_radius(kWheelRadius)
+            .with_drive_motor_initial_configs(drive_config)
+            .with_steer_motor_initial_configs(turn_config)
+            .with_encoder_initial_configs(encoder_config)
+            .with_speed_at12_volts(kMaxSpeed)
+            .with_slip_current(800)
+            .with_drive_motor_closed_loop_output(ClosedLoopOutputType.VOLTAGE)
+            .with_steer_motor_closed_loop_output(ClosedLoopOutputType.VOLTAGE)
+            .with_steer_motor_inverted(False)
+            .with_drive_motor_inverted(False)
+            .with_feedback_source(SteerFeedbackType.REMOTE_CANCODER)
+            .with_coupling_gear_ratio(3.5)
+            .with_steer_motor_gains(turn_config.slot0)
+            .with_drive_motor_gains(drive_config.slot0)
+        )
 
-        self.sim_module_states = [SwerveModuleState(0, wpimath.geometry.Rotation2d()) for _ in range(4)]
-
-        self.sim = sim
-
-    # ---------------------- Basic Methods ----------------------
-    def getRotation2d(self) -> wpimath.geometry.Rotation2d:
+    # ====================== DRIVING METHODS (DIRECT MOTOR CONTROL) ======================
+    
+    def drive(self, x_speed: float, y_speed: float, rotation: float, 
+              field_relative: bool = True, rate_limit: bool = True):
         """
-        Get the current rotation of the robot from the gyro.
-
-        :returns: `Rotation2d` object representing current robot heading
+        Drive using direct motor control instead of requests.
         """
-        return self.drivetrainC.get_rotation3d().toRotation2d()
-
-    def getPose(self) -> wpimath.geometry.Pose2d:
-        """
-        Get the current pose of the robot.
-
-        :returns: `Pose2d` object representing current position and orientation
-        """
-        return self.drivetrainC.get_state().pose if not self.sim else self.getPoseSim()
-
-    def shouldFlipPath(self) -> bool:
-        """
-        Determine whether autonomous paths should be flipped based on alliance color.
-
-        :returns: True if alliance is red, False otherwise
-        """
-        return wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kRed
-
-    def resetPose(self, pose: wpimath.geometry.Pose2d | None = None) -> None:
-        """
-        Reset the robot's odometry to a specified pose.
-
-        :param pose: `Pose2d` object to reset to. Defaults to (0,0,0) if None.
-        """
-        if pose is None:
-            pose = wpimath.geometry.Pose2d()
-        if self.sim:
-            self.sim_pose = pose
-            self.sim_rotation = pose.rotation()
-        else:
-
-            self.drivetrainC.reset_pose(pose)
-
-    # ---------------------- Driving ----------------------
-    def drive(self, xSpeed, ySpeed, rot, fieldRelative: bool, periodSeconds: float):
-        """
-        Drive the robot given speeds and rotation.
-
-        :param xSpeed: x velocity in meters/sec
-        :param ySpeed: y velocity in meters/sec
-        :param rot: rotational speed in radians/sec
-        :param fieldRelative: True if speeds are field-relative
-        :param periodSeconds: loop time for discretization
-        """
-        if fieldRelative:
-            chassisSpeeds = wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(
-                xSpeed, ySpeed, rot, self.getRotation2d()
+        # Apply deadband
+        DEADBAND = 0.1
+        if abs(x_speed) < DEADBAND:
+            x_speed = 0
+        if abs(y_speed) < DEADBAND:
+            y_speed = 0
+        if abs(rotation) < DEADBAND:
+            rotation = 0
+        
+        # If no movement, stop modules
+        if x_speed == 0 and y_speed == 0 and rotation == 0:
+            self.stop()
+            return
+        
+        # Scale inputs to actual speeds
+        vx = x_speed * kMaxSpeed
+        vy = y_speed * kMaxSpeed
+        omega = rotation * kMaxAngularSpeed
+        
+        # Create chassis speeds
+        if field_relative:
+            chassis_speeds = wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(
+                vx, vy, omega, self.get_rotation()
             )
         else:
-            chassisSpeeds = wpimath.kinematics.ChassisSpeeds(xSpeed, ySpeed, rot)
+            chassis_speeds = wpimath.kinematics.ChassisSpeeds(vx, vy, omega)
+        
+        # Convert to module states
+        module_states = self.kinematics.toSwerveModuleStates(chassis_speeds)
+        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(module_states, kMaxSpeed)
+        
+        # Set each module directly
+        self.set_module_states(module_states)
 
-        swerveStates = self.drivetrainC.kinematics.toSwerveModuleStates(
-            wpimath.kinematics.ChassisSpeeds.discretize(chassisSpeeds, periodSeconds)
-        )
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(swerveStates, kMaxSpeed)  # type: ignore
+    def set_module_states(self, desired_states):
+        """Set module states using direct motor control."""
+        for i, desired_state in enumerate(desired_states):
+            module = self.drivetrain.get_module(i)
+            
+            # Optimize the state to minimize rotation
+            current_angle = module.get_current_state().angle
+            optimized_state = self.optimize(desired_state, current_angle)
+            
+            # Get motors
+            drive_motor = module.drive_motor
+            steer_motor = module.steer_motor
+            
+            # Set drive motor velocity (m/s to rotations/s conversion)
+            drive_rps = optimized_state.speed / (2 * math.pi * kWheelRadius) * kDriveGearRatio
+            drive_motor.set_control(self.drive_velocity_control.with_velocity(drive_rps))
+            
+            # Set steer motor position (radians to rotations conversion)
+            steer_rotations = optimized_state.angle.radians() / (2 * math.pi) * kTurnGearRatio
+            steer_motor.set_control(self.steer_position_control.with_position(steer_rotations))
 
-        self.setModuleStates(swerveStates) # type: ignore
-
-    def driveRobotRelative(self, speeds: wpimath.kinematics.ChassisSpeeds, feedforward: DriveFeedforwards):
-        """
-        Drive robot given chassis speeds and feedforward.
-
-        :param speeds: `ChassisSpeeds` object with desired velocities
-        :param feedforward: feedforward object required by PathPlanner
-        """
-        swerveStates = self.drivetrainC.kinematics.toSwerveModuleStates(speeds)
-        for i, module in enumerate(self.drivetrainC.modules):
-            module_request = module.ModuleRequest().with_state(swerveStates[i])
-            module.apply(module_request)
-
-    # ---------------------- Odometry ----------------------
-    def updateOdometry(self) -> None:
-        """Update the robot's odometry and publish telemetry."""
-        self.odometry.update(
-            self.getRotation2d(),
-            tuple([module.get_position(True) for module in self.drivetrainC.modules])  # type: ignore
-        )
-        self.publishTelemetry()
-
-    # ---------------------- Telemetry ----------------------
-    def publishTelemetry(self):
-        """Publish robot pose and module states to SmartDashboard."""
-        pose = self.drivetrainC.get_state().pose
-        self.pose_topic.set([pose.X(), pose.Y(), pose.rotation().degrees()])
-
-        states = self.drivetrainC.get_state().module_states
-        arr = []
-        for s in states:
-            arr += [s.speed, s.angle.radians()]
-        self.module_states_topic.set(arr)
-
-    # ---------------------- Utilities ----------------------
-    def stopModules(self):
-        """Stop all swerve modules using StaticBrake."""
-        stop = StaticBrake()
-        for modules in self.drivetrainC.modules:
-            modules.drive_motor.set_control(stop)
-            modules.steer_motor.set_control(stop)
-            modules.encoder.set_control(stop)
-
-    def getModuleStates(self):
-        """
-        Get the current state of each swerve module.
-
-        :returns: tuple of 4 `SwerveModuleState` objects
-        """
-        return tuple([module.get_current_state() for module in self.drivetrainC.modules])
-    
-    def getModulePositions(self) -> tuple:
-        """
-        Get the current positions of each swerve module.
-
-        :returns: tuple of 4 `SwerveModulePosition` objects
-        """
-        return tuple(module.get_position(True) for module in self.drivetrainC.modules)
-    
-    def setModuleStates(self, desiredStates: tuple[SwerveModuleState, SwerveModuleState, SwerveModuleState, SwerveModuleState]) -> None:
-        """
-        Set desired states for all swerve modules.
-
-        :param desiredStates: tuple containing desired `SwerveModuleState` for each module
-        """
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(
-            desiredStates, kMaxSpeed
-        )
-        for i, module in enumerate(self.drivetrainC.modules):
-            new_desiredState = self.optimize(desiredStates[i], module.get_current_state().angle)
-            module_request = module.ModuleRequest().with_state(new_desiredState)
-            module.apply(module_request)
-
-    def optimize(self, state: SwerveModuleState, currentAngle: wpimath.geometry.Rotation2d) -> SwerveModuleState:
-        """
-        Returns a new optimized state to minimize rotation delta.
-        If the desired angle is more than 90° away, the wheel direction is reversed.
-        """
-        delta = state.angle.radians() - currentAngle.radians()
+    def optimize(self, desired_state, current_angle):
+        """Optimize module state to minimize rotation."""
+        # Get the difference between desired and current angle
+        delta = desired_state.angle.radians() - current_angle.radians()
+        
         # Normalize to [-pi, pi]
-        delta = math.atan2(math.sin(delta), math.cos(delta))
-
+        while delta > math.pi:
+            delta -= 2 * math.pi
+        while delta < -math.pi:
+            delta += 2 * math.pi
+        
+        # If the difference is greater than 90 degrees, reverse speed and add 180°
         if abs(delta) > math.pi / 2:
-            # Flip the wheel direction and rotate angle by 180°
-            flipped_speed = -state.speed
-            flipped_angle = state.angle + wpimath.geometry.Rotation2d(math.pi)
-            return SwerveModuleState(flipped_speed, flipped_angle)
+            return wpimath.kinematics.SwerveModuleState(
+                -desired_state.speed,
+                wpimath.geometry.Rotation2d(desired_state.angle.radians() + math.pi)
+            )
         else:
-            return state
+            return desired_state
 
-    def getRobotRelativeSpeeds(self):
-        """
-        Get the robot-relative chassis speeds based on module states.
+    def drive_chassis_speeds(self, speeds):
+        """Drive using chassis speeds for autonomous."""
+        # Convert to module states
+        module_states = self.kinematics.toSwerveModuleStates(speeds)
+        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(module_states, kMaxSpeed)
 
-        :returns: `ChassisSpeeds` object
-        """
-        if not self.sim:
-            return self.drivetrainC.kinematics.toChassisSpeeds(self.getModuleStates()) # type: ignore
-        else:
-            return self.kinematics.toChassisSpeeds(tuple(self.sim_module_states)) # type: ignore
-    
+        # Set each module directly
+        self.set_module_states(module_states)
 
-    # SIMULATION METHODS
-    
-    def driveSim(self, xSpeed: float, ySpeed: float, rot: float, period: float, fieldRelative: bool = True):
-        """
-        Update module states and robot pose purely in simulation.
-        
-        :param xSpeed: m/s forward
-        :param ySpeed: m/s sideways
-        :param rot: radians/s rotation
-        :param period: loop delta time
-        :param fieldRelative: True if speeds are field relative"""
-
-        if fieldRelative:
-            chassisSpeeds = wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(xSpeed, ySpeed, rot, self.sim_rotation)
-        else:
-            chassisSpeeds = wpimath.kinematics.ChassisSpeeds(xSpeed, ySpeed, rot)
-
-        states = self.kinematics.toSwerveModuleStates(chassisSpeeds)
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(states, kMaxSpeed)
-
+    def stop(self):
+        """Stop all modules using brake control."""
         for i in range(4):
-            self.sim_module_states[i] = self.optimize(states[i], self.sim_module_states[i].angle)
+            module = self.drivetrain.get_module(i)
+            module.drive_motor.set_control(self.brake_control)
+            # Don't brake the steer motor - let it hold position
+            # module.steer_motor.set_control(self.brake_control)
 
-        self.update_pose_sim(period)
-
-
-    def update_pose_sim(self, period: float):
-        chassisSpeeds = self.kinematics.toChassisSpeeds(self.sim_module_states) # type: ignore
-
-        dx = chassisSpeeds.vx * period
-        dy = chassisSpeeds.vy * period
-        dtheta = chassisSpeeds.omega * period
+    def point_wheels(self, angle_radians: float):
+        """Point all wheels in a specific direction."""
+        target_angle = wpimath.geometry.Rotation2d(angle_radians)
+        zero_speed_state = wpimath.kinematics.SwerveModuleState(0.0, target_angle)
         
-        cos_r = math.cos(self.sim_rotation.radians())
-        sin_r = math.sin(self.sim_rotation.radians())
-        self.sim_pose = wpimath.geometry.Pose2d(
-            self.sim_pose.X() + dx * cos_r - dy * sin_r,
-            self.sim_pose.Y() + dx * sin_r + dy * cos_r,
-            self.sim_pose.rotation().rotateBy(wpimath.geometry.Rotation2d(dtheta))
-        )
+        for i in range(4):
+            module = self.drivetrain.get_module(i)
+            drive_motor = module.drive_motor
+            steer_motor = module.steer_motor
+            
+            # Stop drive motor
+            drive_motor.set_control(self.brake_control)
+            
+            # Point steer motor to desired angle
+            steer_rotations = angle_radians / (2 * math.pi) * kTurnGearRatio
+            steer_motor.set_control(self.steer_position_control.with_position(steer_rotations))
 
-        self.sim_rotation = self.sim_pose.rotation()
-        self.sim_gyro.set_raw_yaw(self.sim_rotation.degrees())
+    def x_stance(self):
+        """Put wheels in X formation."""
+        angles = [math.pi/4, -math.pi/4, -math.pi/4, math.pi/4]  # FL, FR, BL, BR
+        
+        for i, angle in enumerate(angles):
+            module = self.drivetrain.get_module(i)
+            drive_motor = module.drive_motor
+            steer_motor = module.steer_motor
+            
+            # Stop drive motor
+            drive_motor.set_control(self.brake_control)
+            
+            # Point to X formation angle
+            steer_rotations = angle / (2 * math.pi) * kTurnGearRatio
+            steer_motor.set_control(self.steer_position_control.with_position(steer_rotations))
 
-    def teleopPeriodicSim(self, xInput, yInput, rotInput, period):
-        xSpeed = xInput * kMaxSpeed
-        ySpeed = yInput * kMaxSpeed
-        rot = rotInput * kMaxAngularSpeed
-        self.driveSim(xSpeed, ySpeed, rot, period)
+    # ====================== GETTERS ======================
 
-    def getModuleStatesSim(self):
-        return tuple(self.sim_module_states) # type: ignore
+    def get_pose(self):
+        """Get current robot pose."""
+        return self.drivetrain.get_state().pose
 
-    def getPoseSim(self):
-        return self.sim_pose
+    def get_rotation(self):
+        """Get current robot rotation."""
+        return self.drivetrain.pigeon2.getRotation2d()
 
+    def get_chassis_speeds(self):
+        """Get current chassis speeds."""
+        module_states = [self.drivetrain.get_module(i).get_current_state() for i in range(4)]
+        return self.kinematics.toChassisSpeeds(tuple(module_states)) # type: ignore
 
-def get_module_constants(driveMotorId: int, turnMotorId: int, canCoderId: int, index: int):
-    """
-    Create and return a SwerveModuleConstants object.
+    def get_module_states(self):
+        """Get current module states."""
+        return [self.drivetrain.get_module(i).get_current_state() for i in range(4)]
 
-    :param driveMotorId: CAN ID for the drive motor
-    :param turnMotorId: CAN ID for the turn motor
-    :param canCoderId: CAN ID for the CANCoder
-    :returns: `SwerveModuleConstants` object with wheel and gear ratio parameters
-    """
+    def get_module_positions(self):
+        """Get current module positions.""" 
+        return [self.drivetrain.get_module(i).get_position(True) for i in range(4)]
 
-    # offsets = [-0.240234, -0.011475, -0.108887, -0.148438]
+    # ====================== ODOMETRY ======================
 
-    driveConfig = TalonFXConfiguration()
-    driveConfig.slot0.k_p = 2.5
-    driveConfig.slot0.k_i = 0
-    driveConfig.slot0.k_d = 0
-    driveConfig.slot0.k_s = 6.4111
-    driveConfig.slot0.k_v = 0.087032
-    driveConfig.slot0.k_a = 0
+    def reset_pose(self, pose=None):
+        """Reset odometry to specified pose."""
+        if pose is None:
+            pose = wpimath.geometry.Pose2d()
+        self.drivetrain.reset_pose(pose)
 
-    driveConfig.feedback.sensor_to_mechanism_ratio = kDriveGearRatio
+    def add_vision_measurement(self, pose, timestamp, std_devs: tuple[float, float, float] | None = None):
+        """Add vision measurement to pose estimator."""
+        if std_devs is None:
+            std_devs = (0.1, 0.1, 0.1)
+        self.drivetrain.add_vision_measurement(pose, timestamp, tuple(std_devs)) # type: ignore
 
-    turnConfig = TalonFXConfiguration()
-    turnConfig.slot0.k_p = 50
-    turnConfig.slot0.k_i = 0
-    turnConfig.slot0.k_d = 3.0889
-    turnConfig.slot0.k_s = 0.21041
-    turnConfig.slot0.k_v = 2.68
-    turnConfig.slot0.k_a = 0.084645 
+    # ====================== UTILITIES ======================
 
-    turnConfig.feedback.sensor_to_mechanism_ratio = kTurnGearRatio
+    def should_flip_path(self):
+        """Determine if autonomous paths should be flipped."""
+        alliance = wpilib.DriverStation.getAlliance()
+        return alliance is not None and alliance == wpilib.DriverStation.Alliance.kRed
 
-    return (SwerveModuleConstants()
-                        .with_drive_motor_id(driveMotorId)
-                        .with_steer_motor_id(turnMotorId)
-                        .with_encoder_id(canCoderId)
-                        .with_drive_motor_gear_ratio(kDriveGearRatio)
-                        .with_steer_motor_gear_ratio(kTurnGearRatio)
-                        .with_wheel_radius(kWheelRadius)
-                        .with_drive_motor_initial_configs(driveConfig)
-                        .with_steer_motor_initial_configs(turnConfig)
-                        .with_encoder_initial_configs(CANcoderConfiguration())
-                        .with_drive_motor_gains(driveConfig.slot0)
-                        .with_steer_motor_gains(turnConfig.slot0)
-                        .with_speed_at12_volts(6)
-                        .with_slip_current(90)
-                        .with_drive_motor_closed_loop_output(ClosedLoopOutputType.TORQUE_CURRENT_FOC)
-                        .with_steer_motor_closed_loop_output(ClosedLoopOutputType.VOLTAGE)
-                        .with_feedback_source(SteerFeedbackType.FUSED_CANCODER)
-                        .with_coupling_gear_ratio(3.5)
-                        # .with_encoder_offset(offsets[index])
-                        )
+    # ====================== PERIODIC METHODS ======================
+
+    def periodic(self):
+        """Called periodically by the command scheduler."""
+        # Phoenix 6 handles odometry updates automatically
+        self.publish_telemetry()
+
+    def publish_telemetry(self):
+        """Publish telemetry to NetworkTables."""
+        try:
+            state = self.drivetrain.get_state()
+            
+            # Publish pose
+            pose = state.pose
+            self.nt_table.putNumberArray("Pose", [pose.X(), pose.Y(), pose.rotation().degrees()])
+            
+            # Publish module states
+            module_data = []
+            for module_state in state.module_states:
+                module_data.extend([module_state.speed, module_state.angle.degrees()])
+            self.nt_table.putNumberArray("ModuleStates", module_data)
+            
+            # Publish other useful data
+            speeds = self.get_chassis_speeds()
+            self.nt_table.putNumber("RobotSpeed", speeds.vx)
+            self.nt_table.putNumber("RobotRotation", self.get_rotation().degrees())
+        except Exception as e:
+            print(f"Telemetry error: {e}")
+
+    # ====================== CALIBRATION ======================
+
+    def calibrate_offsets(self):
+        """Helper method to calibrate encoder offsets."""
+        print("=== ENCODER OFFSET CALIBRATION ===")
+        print("Make sure all wheels are pointing straight forward!")
+        input("Press Enter when ready...")
+        
+        offsets = []
+        for i in range(4):
+            module = self.drivetrain.get_module(i)
+            # Get the CANCoder directly for calibration
+            encoder = module.encoder
+            current_position = encoder.get_absolute_position().value
+            
+            # Calculate offset to make this position = 0
+            offset = -current_position
+            if offset < -0.5:
+                offset += 1.0
+            elif offset > 0.5:
+                offset -= 1.0
+                
+            offsets.append(offset)
+            print(f"Module {i} offset: {offsets[i]:.6f}")
+        
+        print("\nAdd these to your constants file:")
+        module_names = ["FL", "FR", "BL", "BR"]
+        for name, offset in zip(module_names, offsets):
+            print(f"{name}Constants.OFFSET = {offset:.6f}")
+        
+        return offsets

@@ -41,12 +41,14 @@ class MyRobot(wpilib.TimedRobot):
     def robotPeriodic(self):
         """Runs periodically - REDUCED telemetry frequency"""
         
-        if self.controller.getCircleButton():
-            self.swerve.drivetrain.set_control(self.swerve.get_request(self.controller.getLeftX(),
-                                                                   self.controller.getLeftY(),
-                                                                   self.controller.getRightX()))
-        else:
-            self.swerve.stop()
+        # if self.controller.getCircleButton():
+        #     self.swerve.drivetrain.set_control(self.swerve.get_request(self.controller.getLeftX(),
+        #                                                            self.controller.getLeftY(),
+        #                                                            self.controller.getRightX()))
+        # else:
+        #     self.swerve.stop()
+
+        self.driveWithJoystick()
 
         # Only update telemetry every 5th cycle (100ms instead of 20ms)
         self.telemetry_counter += 1

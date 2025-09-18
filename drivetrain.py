@@ -9,6 +9,7 @@ from phoenix6.swerve import (
 from phoenix6.hardware import TalonFX, CANcoder, Pigeon2
 from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration, CurrentLimitsConfigs
 from commands2 import Subsystem
+from phoenix6.controls import StaticBrake
 from phoenix6.swerve.requests import *
 import wpilib
 from ntcore import NetworkTableInstance
@@ -30,7 +31,6 @@ class Drivetrain(Subsystem):
 
     def __init__(self) -> None:
         """Initialize the Phoenix 6 swerve drivetrain."""
-        super().__init__()
         
         # Create drivetrain constants
         self.drivetrain_constants = (
@@ -80,11 +80,9 @@ class Drivetrain(Subsystem):
         # ===== SWERVE REQUESTS - THESE ARE THE KEY PART! =====
         
         # Create request objects once and reuse them
-        self.drive_request = FieldCentric()
-        self.robot_centric_request = RobotCentric()
-        self.point_wheels_request = PointWheelsAt()
-        self.x_stance_request = SwerveDriveBrake()
-        self.idle_request = Idle()
+        self.field_centric_applier = FieldCentric().with_drive_request_type(SwerveModule.DriveRequestType.VELOCITY)
+        self.robot_centric_applier = RobotCentric()
+        self.field_centric_facing_applier = FieldCentricFacingAngle()
         
         # For autonomous - uses ChassisSpeeds directly
         self.auto_request = ApplyRobotSpeeds()
@@ -97,6 +95,45 @@ class Drivetrain(Subsystem):
         # NetworkTables for telemetry
         nt_instance = NetworkTableInstance.getDefault()
         self.nt_table = nt_instance.getTable("SmartDashboard")
+        self.correct_rotation = False
+
+    def on_red(self):
+        return True if wpilib.DriverStation.getAlliance() == wpilib.DriverStation.Alliance.kRed else False
+    
+
+    def get_rotation_3d(self):
+        return self.drivetrain.get_rotation3d()
+    
+    def modifyAxis(self, value: float):
+        if abs(value) <= 0.1:
+            value = 0
+        else:
+            if value > 0.0:
+                value =  (value - 0.1) / (1.0 - 0.1)
+            else:
+                value =  (value + 0.1) / (1.0 - 0.1)
+
+        value = math.copysign(value * value, value)
+        return value
+    
+    def get_position(self, module_id: int):
+        return (self.drivetrain
+                .get_module(module_id)
+                .encoder
+                .get_absolute_position()
+                .value)
+
+    def set_rotation_velocity(self, rotation_rate: rotations_per_second):
+        self.drivetrain.set_control(self.field_centric_applier.with_rotational_rate(rotation_rate))
+
+    def get_robot_relative_speeds(self):
+        return self.drivetrain.kinematics.toChassisSpeeds(tuple(self.drivetrain.get_state().module_states)) # type: ignore
+    
+    def enable_slowmode(self, enable: bool):
+        multiplier = 0.3 if enable else 1
+
+    def close(self):
+        self.drivetrain.close() 
 
     def create_module_constants(self, drive_id: int, turn_id: int, encoder_id: int, encoder_offset: float):
         """Create module constants for a single swerve module."""
@@ -170,7 +207,9 @@ class Drivetrain(Subsystem):
         omega = rotation * kMaxAngularSpeed
         
         # Use field-centric driving (matching Java)
-        request = self.drive_request.with_velocity_x(vx).with_velocity_y(vy).with_rotational_rate(omega)
+        request = (self.field_centric_applier.with_velocity_x(vx)
+                   .with_velocity_y(vy)
+                   .with_rotational_rate(omega))
         
         # Send the request to the drivetrain - Phoenix 6 handles everything else!
         self.drivetrain.set_control(request)
@@ -199,7 +238,7 @@ class Drivetrain(Subsystem):
 
     def stop(self):
         """Stop the drivetrain by going to idle."""
-        self.drivetrain.set_control(self.idle_request)
+        self.drivetrain.set_control(Idle())
 
     def point_wheels(self, direction: Rotation2d):
         """
@@ -208,12 +247,8 @@ class Drivetrain(Subsystem):
         Args:
             direction: wpimath.geometry.Rotation2d object
         """
-        request = self.point_wheels_request.with_module_direction(direction)
+        request = self.field_centric_facing_applier.with_target_direction(direction)
         self.drivetrain.set_control(request)
-
-    def x_stance(self):
-        """Put wheels in X formation for defense."""
-        self.drivetrain.set_control(self.x_stance_request)
 
     # ====================== ADVANCED REQUESTS ======================
     
@@ -268,9 +303,17 @@ class Drivetrain(Subsystem):
 
     # ====================== ODOMETRY ======================
 
-    def reset_pose(self, pose: Pose2d = Pose2d()):
+    def reset_pose(self):
+        self.correct_rotation = False
+        self.drivetrain.seed_field_centric()
+
+    def set_pose(self, pose: Pose2d):
         """Reset odometry to specified pose."""
-        self.drivetrain.reset_pose(pose)
+        self.correct_rotation = True
+        if pose is not None:
+            self.drivetrain.reset_pose(pose)
+        else:
+            raise RuntimeError("set_pose() was passed a None argument! Possibly unintended behavior may occur.", False)
 
     def add_vision_measurement(self, pose: Pose2d, timestamp: second, std_devs: tuple[float, float, float] | None = None):
         """Add vision measurement to pose estimator."""

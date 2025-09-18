@@ -4,6 +4,7 @@ from drivetrain import Drivetrain
 from ntcore import NetworkTableInstance
 from robotcontainer import RobotContainer
 from wpilib import DriverStation
+from phoenix6.swerve import SwerveModuleState
 import math
 
 class MyRobot(wpilib.TimedRobot):
@@ -36,16 +37,15 @@ class MyRobot(wpilib.TimedRobot):
         # Telemetry counter to reduce update frequency
         self.telemetry_counter = 0
         
-        # self.autoCommand = None
 
     def robotPeriodic(self):
         """Runs periodically - REDUCED telemetry frequency"""
         
         # if self.controller.getCircleButton():
-        #     self.swerve.drivetrain.set_control(self.swerve.get_request(self.controller.getLeftX(),
-        #                                                            self.controller.getLeftY(),
-        #                                                            self.controller.getRightX()))
-        # else:
+        #     self.swerve.x_stance()
+        # if self.controller.getL1Button():
+        #     self.swerve.point_wheels(wpimath.geometry.Rotation2d(math.pi))
+        # if self.controller.getCrossButton():
         #     self.swerve.stop()
 
         self.driveWithJoystick()
@@ -94,7 +94,7 @@ class MyRobot(wpilib.TimedRobot):
     def teleopPeriodic(self):
         """Runs during teleop - FIXED to prevent conflicts"""
         if self.controller.getCircleButton():
-            self.swerve.point_wheels(self.controller.getLeftX())
+            self.swerve.point_wheels(wpimath.geometry.Rotation2d(self.controller.getLeftX()))
         if self.controller.getL2Button():
             self.swerve.stop()
         
@@ -124,7 +124,7 @@ class MyRobot(wpilib.TimedRobot):
         
         if is_moving:
             # Only send drive command if we're actually moving
-            self.swerve.drive(x_speed, y_speed, rotation, field_relative=True, rate_limit=False)
+            self.swerve.drive(x_speed, y_speed, rotation, field_relative=True)
             self.last_drive_time = wpilib.Timer.getFPGATimestamp()
         else:
             # If not moving, only send stop command occasionally to avoid spam

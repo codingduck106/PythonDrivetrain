@@ -5,7 +5,7 @@ class FLConstants:
     DRIVE = 12
     TURN = 10
     CAN = 11
-    OFFSET = 0.0 # negated phoenix tuner x value
+    OFFSET = 0.0
 
 class FRConstants:
     DRIVE = 3

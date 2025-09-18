@@ -14,7 +14,7 @@ class RobotContainer:
     
     def __init__(self, alliance: wpilib.DriverStation.Alliance | None):
         """Initialize with conflict prevention"""
-        self.drive = Drivetrain(alliance if alliance else wpilib.DriverStation.getAlliance())  # Use the fixed drivetrain
+        self.drive = Drivetrain()  # Use the fixed drivetrain
         self.configureBindings()
         
         # PathPlanner setup - but with better isolation

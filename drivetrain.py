@@ -8,18 +8,14 @@ from phoenix6.swerve import (
 )
 from phoenix6.hardware import TalonFX, CANcoder, Pigeon2
 from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration, CurrentLimitsConfigs
-from phoenix6.controls import VelocityVoltage, PositionVoltage, StaticBrake
-from phoenix6.units import second
-from phoenix6.swerve.requests import *
 from commands2 import Subsystem
+from phoenix6.swerve.requests import *
 import wpilib
-import wpimath.kinematics
-import wpimath.geometry
 from ntcore import NetworkTableInstance
 from constants import *
 
 # Constants - adjust these to match your robot
-kMaxSpeed = 6.0  # Phoenix 6 typically uses higher speeds (m/s)
+kMaxSpeed = 6.0  # m/s
 kMaxAngularSpeed = 2 * math.pi  # rad/sec
 kWheelRadius = 0.0390398  # meters
 kDriveGearRatio = 6.75
@@ -29,12 +25,13 @@ LEFT_DIST = 0.3302
 
 class Drivetrain(Subsystem):
     """
-    Phoenix 6 swerve drivetrain with direct motor control instead of requests.
+    Phoenix 6 swerve drivetrain using the requests API.
     """
 
-    def __init__(self, alliance: wpilib.DriverStation.Alliance | None) -> None:
+    def __init__(self) -> None:
         """Initialize the Phoenix 6 swerve drivetrain."""
-        self.alliance = alliance
+        super().__init__()
+        
         # Create drivetrain constants
         self.drivetrain_constants = (
             SwerveDrivetrainConstants()
@@ -77,70 +74,50 @@ class Drivetrain(Subsystem):
             .with_stator_current_limit_enable(False)
         )
         
-        for i in range(4): self.drivetrain.get_module(i).drive_motor.configurator.apply(current_limits)
+        for i in range(4):
+            self.drivetrain.get_module(i).drive_motor.configurator.apply(current_limits)
         
-        # Create control objects for direct motor control
-        self.drive_velocity_control = VelocityVoltage(0)
-        self.steer_position_control = PositionVoltage(0)
-        self.brake_control = StaticBrake()
+        # ===== SWERVE REQUESTS - THESE ARE THE KEY PART! =====
         
-        # Create WPILib kinematics for manual control
-        self.front_left_location = wpimath.geometry.Translation2d(FRONT_DIST, LEFT_DIST)
-        self.front_right_location = wpimath.geometry.Translation2d(FRONT_DIST, -LEFT_DIST)
-        self.back_left_location = wpimath.geometry.Translation2d(-FRONT_DIST, LEFT_DIST)
-        self.back_right_location = wpimath.geometry.Translation2d(-FRONT_DIST, -LEFT_DIST)
+        # Create request objects once and reuse them
+        self.drive_request = FieldCentric()
+        self.robot_centric_request = RobotCentric()
+        self.point_wheels_request = PointWheelsAt()
+        self.x_stance_request = SwerveDriveBrake()
+        self.idle_request = Idle()
         
-        self.kinematics = wpimath.kinematics.SwerveDrive4Kinematics(
-            self.front_left_location,
-            self.front_right_location,
-            self.back_left_location,
-            self.back_right_location
-        )
+        # For autonomous - uses ChassisSpeeds directly
+        self.auto_request = ApplyRobotSpeeds()
+        
+        # For SysId characterization (if needed)
+        self.sysid_translation_request = SysIdSwerveTranslation()
+        self.sysid_rotation_request = SysIdSwerveRotation()
+        self.sysid_steer_request = SysIdSwerveSteerGains()
         
         # NetworkTables for telemetry
         nt_instance = NetworkTableInstance.getDefault()
         self.nt_table = nt_instance.getTable("SmartDashboard")
 
-        self.drivetrain.set_operator_perspective_forward(Rotation2d(0) if self.alliance == wpilib.DriverStation.Alliance.kBlue else Rotation2d(math.pi))
-
-    def get_request(self, xSpeed: meters_per_second, ySpeed: meters_per_second, rot: radians_per_second) -> FieldCentric:
-        req = (FieldCentric()
-               .with_velocity_x(xSpeed)
-               .with_velocity_y(ySpeed)
-               .with_rotational_rate(rot)
-               .with_rotational_deadband(0.07)
-               .with_forward_perspective(ForwardPerspectiveValue.OPERATOR_PERSPECTIVE))
-        return req
-    
-    def get_request_speeds(self, speeds: ChassisSpeeds):
-        req = (FieldCentric()
-               .with_velocity_x(speeds.vx)
-               .with_velocity_y(speeds.vy)
-               .with_rotational_rate(speeds.omega)
-               .with_rotational_deadband(0.07)
-               .with_forward_perspective(ForwardPerspectiveValue.OPERATOR_PERSPECTIVE))
-        
-
     def create_module_constants(self, drive_id: int, turn_id: int, encoder_id: int, encoder_offset: float):
         """Create module constants for a single swerve module."""
         
-        # Drive motor configuration
+        # Drive motor configuration - matching Java gains
         drive_config = TalonFXConfiguration()
-        drive_config.slot0.k_p = 3.0
+        drive_config.slot0.k_p = 2.5
         drive_config.slot0.k_i = 0.0
         drive_config.slot0.k_d = 0.0
-        drive_config.slot0.k_s = 0.1
-        drive_config.slot0.k_v = 0.12
+        drive_config.slot0.k_s = 6.4111
+        drive_config.slot0.k_v = 0.087032
         drive_config.slot0.k_a = 0.0
         
-        # Turn motor configuration - LOWERED GAINS
+        # Turn motor configuration - matching Java gains
         turn_config = TalonFXConfiguration()
-        turn_config.slot0.k_p = 20.0  # Much lower than 100
+        turn_config.slot0.k_p = 50.0  # Match Java
         turn_config.slot0.k_i = 0.0
-        turn_config.slot0.k_d = 0.0   # Start with 0 D term
-        turn_config.slot0.k_s = 0.0
-        turn_config.slot0.k_v = 1.5
-        turn_config.slot0.k_a = 0.0
+        turn_config.slot0.k_d = 3.0889  # Match Java
+        turn_config.slot0.k_s = 0.21041
+        turn_config.slot0.k_v = 2.68
+        turn_config.slot0.k_a = 0.084645
         
         # CANCoder configuration
         encoder_config = CANcoderConfiguration()
@@ -170,139 +147,104 @@ class Drivetrain(Subsystem):
             .with_drive_motor_gains(drive_config.slot0)
         )
 
-    # ====================== DRIVING METHODS (DIRECT MOTOR CONTROL) ======================
+    # ====================== DRIVING METHODS (USING REQUESTS API) ======================
     
-    def drive(self, x_speed: float, y_speed: float, rotation: float, 
-              field_relative: bool = True, rate_limit: bool = True):
+    def drive(self, x_speed: float, y_speed: float, rotation: float, field_relative: bool = True):
         """
-        Drive using direct motor control instead of requests.
-        """
-        # Apply deadband
-        DEADBAND = 0.1
-        if abs(x_speed) < DEADBAND:
-            x_speed = 0
-        if abs(y_speed) < DEADBAND:
-            y_speed = 0
-        if abs(rotation) < DEADBAND:
-            rotation = 0
+        Drive using Phoenix 6 requests API - matches your working Java version.
         
-        # If no movement, stop modules
-        if x_speed == 0 and y_speed == 0 and rotation == 0:
-            self.stop()
-            return
+        Args:
+            x_speed: Forward/backward speed (-1 to 1)
+            y_speed: Left/right speed (-1 to 1) 
+            rotation: Rotation speed (-1 to 1)
+            field_relative: Whether to drive relative to field or robot
+        """
+        # Apply deadband and squaring like Java version
+        x_speed = self.modify_axis(x_speed)
+        y_speed = self.modify_axis(y_speed)
+        rotation = self.modify_axis(rotation)
         
         # Scale inputs to actual speeds
         vx = x_speed * kMaxSpeed
         vy = y_speed * kMaxSpeed
         omega = rotation * kMaxAngularSpeed
         
-        # Create chassis speeds
-        if field_relative:
-            chassis_speeds = wpimath.kinematics.ChassisSpeeds.fromFieldRelativeSpeeds(
-                vx, vy, omega, self.get_rotation()
-            )
-        else:
-            chassis_speeds = wpimath.kinematics.ChassisSpeeds(vx, vy, omega)
+        # Use field-centric driving (matching Java)
+        request = self.drive_request.with_velocity_x(vx).with_velocity_y(vy).with_rotational_rate(omega)
         
-        # Convert to module states
-        module_states = self.kinematics.toSwerveModuleStates(chassis_speeds)
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(module_states, kMaxSpeed)
+        # Send the request to the drivetrain - Phoenix 6 handles everything else!
+        self.drivetrain.set_control(request)
+    
+    def modify_axis(self, value: float) -> float:
+        """Apply deadband and squaring like the Java version."""
+        # Apply deadband
+        DEADBAND = 0.1
+        if abs(value) < DEADBAND:
+            value = 0.0
         
-        # Set each module directly
-        self.set_module_states(module_states)
-
-    def set_module_states(self, desired_states):
-        """Set module states using direct motor control."""
-        for i, desired_state in enumerate(desired_states):
-            module = self.drivetrain.get_module(i)
-            
-            # Optimize the state to minimize rotation
-            current_angle = module.get_current_state().angle
-            optimized_state = self.optimize(desired_state, current_angle)
-            
-            # Get motors
-            drive_motor = module.drive_motor
-            steer_motor = module.steer_motor
-            
-            # Set drive motor velocity (m/s to rotations/s conversion)
-            drive_rps = optimized_state.speed / (2 * math.pi * kWheelRadius) * kDriveGearRatio
-            drive_motor.set_control(self.drive_velocity_control.with_velocity(drive_rps))
-            
-            # Set steer motor position (radians to rotations conversion)
-            steer_rotations = optimized_state.angle.radians() / (2 * math.pi) * kTurnGearRatio
-            steer_motor.set_control(self.steer_position_control.with_position(steer_rotations))
-
-    def optimize(self, desired_state, current_angle):
-        """Optimize module state to minimize rotation."""
-        # Get the difference between desired and current angle
-        delta = desired_state.angle.radians() - current_angle.radians()
+        # Square the input while preserving sign (like Java)
+        value = math.copysign(value * value, value)
         
-        # Normalize to [-pi, pi]
-        while delta > math.pi:
-            delta -= 2 * math.pi
-        while delta < -math.pi:
-            delta += 2 * math.pi
+        return value
+
+    def drive_chassis_speeds(self, chassis_speeds: ChassisSpeeds):
+        """
+        Drive using chassis speeds for autonomous.
         
-        # If the difference is greater than 90 degrees, reverse speed and add 180°
-        if abs(delta) > math.pi / 2:
-            return wpimath.kinematics.SwerveModuleState(
-                -desired_state.speed,
-                wpimath.geometry.Rotation2d(desired_state.angle.radians() + math.pi)
-            )
-        else:
-            return desired_state
-
-    def drive_chassis_speeds(self, speeds):
-        """Drive using chassis speeds for autonomous."""
-        # Convert to module states
-        module_states = self.kinematics.toSwerveModuleStates(speeds)
-        wpimath.kinematics.SwerveDrive4Kinematics.desaturateWheelSpeeds(module_states, kMaxSpeed)
-
-        # Set each module directly
-        self.set_module_states(module_states)
+        Args:
+            chassis_speeds: wpimath.kinematics.ChassisSpeeds object
+        """
+        request = self.auto_request.with_speeds(chassis_speeds)
+        self.drivetrain.set_control(request)
 
     def stop(self):
-        """Stop all modules using brake control."""
-        for i in range(4):
-            module = self.drivetrain.get_module(i)
-            module.drive_motor.set_control(self.brake_control)
-            # Don't brake the steer motor - let it hold position
-            # module.steer_motor.set_control(self.brake_control)
+        """Stop the drivetrain by going to idle."""
+        self.drivetrain.set_control(self.idle_request)
 
-    def point_wheels(self, angle_radians: float):
-        """Point all wheels in a specific direction."""
-        target_angle = wpimath.geometry.Rotation2d(angle_radians)
-        zero_speed_state = wpimath.kinematics.SwerveModuleState(0.0, target_angle)
+    def point_wheels(self, direction: Rotation2d):
+        """
+        Point all wheels in a specific direction.
         
-        for i in range(4):
-            module = self.drivetrain.get_module(i)
-            drive_motor = module.drive_motor
-            steer_motor = module.steer_motor
-            
-            # Stop drive motor
-            drive_motor.set_control(self.brake_control)
-            
-            # Point steer motor to desired angle
-            steer_rotations = angle_radians / (2 * math.pi) * kTurnGearRatio
-            steer_motor.set_control(self.steer_position_control.with_position(steer_rotations))
+        Args:
+            direction: wpimath.geometry.Rotation2d object
+        """
+        request = self.point_wheels_request.with_module_direction(direction)
+        self.drivetrain.set_control(request)
 
     def x_stance(self):
-        """Put wheels in X formation."""
-        angles = [math.pi/4, -math.pi/4, -math.pi/4, math.pi/4]  # FL, FR, BL, BR
-        
-        for i, angle in enumerate(angles):
-            module = self.drivetrain.get_module(i)
-            drive_motor = module.drive_motor
-            steer_motor = module.steer_motor
-            
-            # Stop drive motor
-            drive_motor.set_control(self.brake_control)
-            
-            # Point to X formation angle
-            steer_rotations = angle / (2 * math.pi) * kTurnGearRatio
-            steer_motor.set_control(self.steer_position_control.with_position(steer_rotations))
+        """Put wheels in X formation for defense."""
+        self.drivetrain.set_control(self.x_stance_request)
 
-    # ====================== GETTERS ======================
+    # ====================== ADVANCED REQUESTS ======================
+    
+    def drive_with_path_following(self, target_speeds: ChassisSpeeds, target_pose: Pose2d):
+        """
+        Example of more advanced request usage with feedforward.
+        This would be used in autonomous path following.
+        """
+        request = (self.auto_request
+                  .with_speeds(target_speeds)
+                  .with_wheel_force_feedforwards_x([0, 0, 0, 0])  # Optional feedforward
+                  .with_wheel_force_feedforwards_y([0, 0, 0, 0]))
+        
+        self.drivetrain.set_control(request)
+
+    def characterize_translation(self, volts: float):
+        """Run translation characterization for SysId."""
+        request = self.sysid_translation_request.with_volts(volts)
+        self.drivetrain.set_control(request)
+
+    def characterize_rotation(self, volts: float):
+        """Run rotation characterization for SysId.""" 
+        request = self.sysid_rotation_request.with_rotational_rate(volts)
+        self.drivetrain.set_control(request)
+
+    def characterize_steer(self, volts: float):
+        """Run steer characterization for SysId."""
+        request = self.sysid_steer_request.with_volts(volts)
+        self.drivetrain.set_control(request)
+
+    # ====================== GETTERS (SAME AS BEFORE) ======================
 
     def get_pose(self):
         """Get current robot pose."""
@@ -314,26 +256,23 @@ class Drivetrain(Subsystem):
 
     def get_chassis_speeds(self):
         """Get current chassis speeds."""
-        module_states = [self.drivetrain.get_module(i).get_current_state() for i in range(4)]
-        return self.kinematics.toChassisSpeeds(tuple(module_states)) # type: ignore
+        return self.drivetrain.kinematics.toChassisSpeeds(tuple(self.drivetrain.get_state().module_states)) # type: ignore
 
     def get_module_states(self):
         """Get current module states."""
-        return [self.drivetrain.get_module(i).get_current_state() for i in range(4)]
+        return self.drivetrain.get_state().module_states
 
     def get_module_positions(self):
         """Get current module positions.""" 
-        return [self.drivetrain.get_module(i).get_position(True) for i in range(4)]
+        return self.drivetrain.get_state().module_positions
 
     # ====================== ODOMETRY ======================
 
-    def reset_pose(self, pose=None):
+    def reset_pose(self, pose: Pose2d = Pose2d()):
         """Reset odometry to specified pose."""
-        if pose is None:
-            pose = wpimath.geometry.Pose2d()
         self.drivetrain.reset_pose(pose)
 
-    def add_vision_measurement(self, pose, timestamp, std_devs: tuple[float, float, float] | None = None):
+    def add_vision_measurement(self, pose: Pose2d, timestamp: second, std_devs: tuple[float, float, float] | None = None):
         """Add vision measurement to pose estimator."""
         if std_devs is None:
             std_devs = (0.1, 0.1, 0.1)
@@ -386,7 +325,6 @@ class Drivetrain(Subsystem):
         offsets = []
         for i in range(4):
             module = self.drivetrain.get_module(i)
-            # Get the CANCoder directly for calibration
             encoder = module.encoder
             current_position = encoder.get_absolute_position().value
             

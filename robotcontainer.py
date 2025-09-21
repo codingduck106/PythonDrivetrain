@@ -1,105 +1,127 @@
-# from pathplannerlib.config import RobotConfig, PIDConstants
-# from pathplannerlib.auto import AutoBuilder
-# from pathplannerlib.controller import PPHolonomicDriveController
-
-
-from drivetrain import *
+from pathplannerlib.config import RobotConfig, PIDConstants
+from pathplannerlib.auto import AutoBuilder
+from pathplannerlib.controller import PPHolonomicDriveController
+from wpimath.units import meters
+from subsystems.drivetrain import Drive
+from wpimath.geometry import Pose2d, Rotation2d
+import wpilib
 from ntcore import NetworkTableInstance
 from wpilib import SmartDashboard
 from commands2.instantcommand import InstantCommand
+from commands.defaultdrivecommand import DefaultDriveCommand
 from constants import *
+import math
+
+DEFAULT_MAX_VELOCITY_METERS_PER_SECOND = 6
+DEFAULT_MAX_ROTATIONS_PER_SECOND = 1.2
+max_radians_per_second = DEFAULT_MAX_ROTATIONS_PER_SECOND * math.pi * 2
+
 
 class RobotContainer:
     """Fixed robot container to prevent command conflicts"""
+
+    ALLIANCE_USED_IN_PATHS= wpilib.DriverStation.Alliance.kBlue
     
+    bot_pose_blue_origin = Pose2d(meters(-8.7736), meters(-4.0257), Rotation2d())
     def __init__(self, alliance: wpilib.DriverStation.Alliance | None):
         """Initialize with conflict prevention"""
-        self.drive = Drivetrain()  # Use the fixed drivetrain
+        self.drive = Drive()  # Use the fixed drivetrain
+        self.drive.setDefaultCommand(
+            DefaultDriveCommand(self.drive,
+                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftY()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND,
+                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftX()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND,
+                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getRightX()) * max_radians_per_second)
+        )
         self.configureBindings()
         
-        # PathPlanner setup - but with better isolation
-        # try:
-        #     config = RobotConfig.fromGUISettings()
-            
-        #     AutoBuilder.configure(
-        #         self.drive.get_pose,
-        #         self.drive.reset_pose,
-        #         self.drive.get_chassis_speeds,
-        #         lambda speeds, ff: self.drive.drive_chassis_speeds(speeds),  # This calls the fixed method
-        #         PPHolonomicDriveController(
-        #             PIDConstants(5.0, 0.0, 0.0),
-        #             PIDConstants(5.0, 0.0, 0.0),
-        #         ),
-        #         config,
-        #         self.drive.should_flip_path,
-        #         self.drive,
-        #     )
-            
-        #     self.autoChooser = AutoBuilder.buildAutoChooser()
-        # except Exception as e:
-        #     print(f"PathPlanner setup failed: {e}")
-        #     self.autoChooser = None
-        
+        self.autoChooser = self.configure_auto(self.drive)
+        SmartDashboard.putData("Auto Routine", self.autoChooser)
+        self.configureBindings()
         # Reduced NetworkTables usage
         self.nt_table = NetworkTableInstance.getDefault().getTable("SmartDashboard")
         # if self.autoChooser:
         #     SmartDashboard.putData("Auto Chooser", self.autoChooser)
+        # self.DRIVE_SYSID = SwerveSysidRequest(MotorType.Drive, RequestType.torque_current_foc)
+        # self.STEER_SYSID = SwerveSysidRequest(MotorType.Swerve, RequestType.voltage_out)
+
+    def configure_auto(self, drive: Drive): # add more subsystems later
+        try:
+            config = RobotConfig.fromGUISettings()
+        except Exception as e:
+            raise RuntimeError("Could not get Config", e)
+        
+        AutoBuilder.configure(
+                drive.get_pose,
+                drive.set_pose,
+                drive.get_robot_relative_speeds,
+                lambda speeds, ff: drive.driveRobotRelative(speeds),  # This calls the fixed method
+                PPHolonomicDriveController(
+                    PIDConstants(15.0, 0.0, 0.0),
+                    PIDConstants(6.85, 0.0, 1.3),
+                ),
+                config,
+                lambda: wpilib.DriverStation.getAlliance() != self.ALLIANCE_USED_IN_PATHS,
+                drive,
+            )
+        self.configure_auto_commands() # add subsystems as arguments later
+        return AutoBuilder.buildAutoChooser()
+
+    # def get_sysid_routines(self, registry: SubsystemRegistry):
+    #     routines = []
+    #     routines.append(
+    #         DropdownEntry("Drive-Drive Motor",
+    #                       SysIdRoutine(
+    #                           SysIdRoutine.Config(
+    #                               0,
+    #                               0,
+    #                               0,
+    #                               lambda s: SignalLogger.write_string("state", s.__str__()) # type: ignore
+    #                           ),
+    #                       SysIdRoutine.Mechanism(
+    #                           lambda v: (registry
+    #                                      .subsystems[type(Drivetrain)]
+    #                                      .run(self.DRIVE_SYSID.with_voltage)
+    #                                      .schedule()),
+    #                             lambda s: None,
+    #                             registry.subsystems[Drivetrain]
+    #                       )
+    #                       ))
+    #     )
+        # routines.append(
+        #     DropdownEntry("Drive-Steer Motor",
+        #                   SysIdRoutine(
+        #                       SysIdRoutine.Config(
+        #                           0,
+        #                           0,
+        #                           0,
+        #                           lambda s: SignalLogger.write_string("state", s.__str__()) # type: ignore
+        #                       ),
+        #                   SysIdRoutine.Mechanism(
+        #                       lambda v: (registry
+        #                                  .subsystems[Drivetrain]),
+        #                         lambda s: None,
+        #                         registry.subsystems[Drivetrain]
+        #                   )
+        #                   ))
+        # )
+
+    @classmethod
+    def to_bot_pose_blue(cls, orig: Pose2d):
+        return orig.relativeTo(cls.bot_pose_blue_origin)
+    
+    
+    def configure_auto_commands(self):
+        pass # leave empty for now, add subsystem functions later
     
     def configureBindings(self):
         """Simplified bindings to prevent conflicts"""
-        from constants import RESET_POSE
-        from commands2.instantcommand import InstantCommand
         
         # Only bind essential commands
         RESET_POSE.onTrue(InstantCommand(lambda: self.drive.reset_pose()))
     
-    # def getAutonomousCommand(self):
-    #     """Get auto command with error handling"""
-    #     if self.autoChooser:
-    #         return self.autoChooser.getSelected()
-    #     return None
-
-# ====================== DEBUGGING METHODS ======================
-
-def debug_control_conflicts():
-    """Debug method to identify control conflicts"""
+    def getAutonomousCommand(self):
+        """Get auto command with error handling"""
+        return self.autoChooser.getSelected()
     
-    print("""
-    === CONTROL CONFLICT DEBUG CHECKLIST ===
-    
-    ✅ Common Causes of 70-degree oscillation:
-    
-    1. RAPID FIRE COMMANDS:
-       - robotPeriodic() running telemetry at 50Hz
-       - teleopPeriodic() sending drive commands at 50Hz  
-       - Both accessing module states simultaneously
-    
-    2. PATHPLANNER INTERFERENCE:
-       - AutoBuilder still active in teleop
-       - Autonomous command not properly cancelled
-       - PathPlanner sending conflicting chassis speeds
-    
-    3. COMMAND SCHEDULER CONFLICTS:
-       - Multiple commands trying to control drivetrain
-       - InstantCommand reset_pose running during drive
-    
-    4. NETWORKTABLES SPAM:
-       - Publishing module states every 20ms
-       - NetworkTables causing delays in command processing
-    
-    ✅ Solutions Applied:
-    
-    1. Rate limited drive commands (50Hz max)
-    2. Reduced telemetry frequency (10Hz instead of 50Hz)
-    3. Added proper teleop initialization  
-    4. Prevented duplicate requests
-    5. Added larger deadband (0.15 instead of 0.1)
-    6. Cancelled auto commands on teleop init
-    
-    ✅ Test This:
-    
-    1. Deploy the fixed code above
-    2. Enable teleop with NO joystick input
-    3. Modules should NOT oscillate
-    4. If still oscillating, the issue is in Phoenix 6 config
-    """)
+    def close(self): # add more subsystems later
+        self.drive.close()

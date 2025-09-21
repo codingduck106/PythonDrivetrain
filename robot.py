@@ -1,11 +1,12 @@
 import wpilib
 import wpimath.filter
-from drivetrain import Drivetrain
+# from drivetrain import Drivetrain
 from ntcore import NetworkTableInstance
 from robotcontainer import RobotContainer
 from wpilib import DriverStation
 from phoenix6.swerve import SwerveModuleState
 import math
+from commands2 import CommandScheduler
 
 class MyRobot(wpilib.TimedRobot):
     """Fixed robot class to prevent control conflicts"""
@@ -36,6 +37,8 @@ class MyRobot(wpilib.TimedRobot):
         
         # Telemetry counter to reduce update frequency
         self.telemetry_counter = 0
+
+        self.autonomous_command = None
         
 
     def robotPeriodic(self):
@@ -48,8 +51,9 @@ class MyRobot(wpilib.TimedRobot):
         # if self.controller.getCrossButton():
         #     self.swerve.stop()
 
-        self.driveWithJoystick()
+        # self.driveWithJoystick()
 
+        CommandScheduler.getInstance().run()
         # Only update telemetry every 5th cycle (100ms instead of 20ms)
         self.telemetry_counter += 1
         if self.telemetry_counter >= 5:
@@ -60,8 +64,8 @@ class MyRobot(wpilib.TimedRobot):
         """Update telemetry at reduced frequency"""
         try:
             pose = self.swerve.get_pose()
-            speeds = self.swerve.get_chassis_speeds()
-            module_states = self.swerve.get_module_states()
+            speeds = self.swerve.get_robot_relative_speeds()
+            module_states = self.swerve.drivetrain.get_state().module_states
             
             self.pose_pub.set([pose.X(), pose.Y(), pose.rotation().degrees()])
             self.speeds_pub.set([speeds.vx, speeds.vy, speeds.omega])
@@ -74,72 +78,60 @@ class MyRobot(wpilib.TimedRobot):
 
     def autonomousInit(self):
         """Runs when auto begins"""
+        self.autonomous_command = self.container.getAutonomousCommand()
         # self.is_driving_manually = False
         # self.autoCommand = self.container.getAutonomousCommand()
         # if self.autoCommand:
         #     self.autoCommand.schedule()
+        if self.autonomous_command:
+            self.autonomous_command.schedule()
 
     def teleopInit(self):
         """Runs when teleop begins - CRITICAL FIX"""
-        # Cancel any autonomous commands that might still be running
-        # if self.autoCommand and self.autoCommand.isScheduled():
-        #     self.autoCommand.cancel()
-        
-        # Ensure drivetrain is in manual control mode
-        self.is_driving_manually = True
-        
-        # Stop any residual motion
-        self.swerve.stop()
+        if self.autonomous_command:
+            self.autonomous_command.cancel()
 
-    def teleopPeriodic(self):
-        """Runs during teleop - FIXED to prevent conflicts"""
-        if self.controller.getCircleButton():
-            self.swerve.point_wheels(wpimath.geometry.Rotation2d(self.controller.getLeftX()))
-        if self.controller.getL2Button():
-            self.swerve.stop()
+    # def teleopPeriodic(self):
+    #     """Runs during teleop - FIXED to prevent conflicts"""
+    #     if self.controller.getCircleButton():
+    #         self.swerve.point_wheels(wpimath.geometry.Rotation2d(self.controller.getLeftX()))
+    #     if self.controller.getL2Button():
+    #         self.swerve.stop()
         
 
-    def driveWithJoystick(self):
-        """Fixed joystick driving with deadband and conflict prevention"""
+    # def driveWithJoystick(self):
+    #     """Fixed joystick driving with deadband and conflict prevention"""
         
-        # Get raw joystick inputs
-        raw_x = -self.controller.getLeftY()  # Forward/backward (inverted)
-        raw_y = -self.controller.getLeftX()  # Left/right (inverted)
-        raw_rot = -self.controller.getRightX()  # Rotation (inverted)
+    #     # Get raw joystick inputs
+    #     raw_x = -self.controller.getLeftY()  # Forward/backward (inverted)
+    #     raw_y = -self.controller.getLeftX()  # Left/right (inverted)
+    #     raw_rot = -self.controller.getRightX()  # Rotation (inverted)
         
-        # Apply deadband to prevent tiny movements causing oscillation
-        DEADBAND = 0.15  # Increase this if still getting micro-movements
+    #     # Apply deadband to prevent tiny movements causing oscillation
+    #     DEADBAND = 0.15  # Increase this if still getting micro-movements
         
-        x_speed = raw_x if abs(raw_x) > DEADBAND else 0.0
-        y_speed = raw_y if abs(raw_y) > DEADBAND else 0.0
-        rotation = raw_rot if abs(raw_rot) > DEADBAND else 0.0
+    #     x_speed = raw_x if abs(raw_x) > DEADBAND else 0.0
+    #     y_speed = raw_y if abs(raw_y) > DEADBAND else 0.0
+    #     rotation = raw_rot if abs(raw_rot) > DEADBAND else 0.0
         
-        # Apply slew rate limiting
-        x_speed = self.xLimiter.calculate(x_speed)
-        y_speed = self.yLimiter.calculate(y_speed)
-        rotation = self.rotLimiter.calculate(rotation)
+    #     # Apply slew rate limiting
+    #     x_speed = self.xLimiter.calculate(x_speed)
+    #     y_speed = self.yLimiter.calculate(y_speed)
+    #     rotation = self.rotLimiter.calculate(rotation)
         
-        # Check if we're actually trying to move
-        is_moving = abs(x_speed) > 0.01 or abs(y_speed) > 0.01 or abs(rotation) > 0.01
+    #     # Check if we're actually trying to move
+    #     is_moving = abs(x_speed) > 0.01 or abs(y_speed) > 0.01 or abs(rotation) > 0.01
         
-        if is_moving:
-            # Only send drive command if we're actually moving
-            self.swerve.drive(x_speed, y_speed, rotation, field_relative=True)
-            self.last_drive_time = wpilib.Timer.getFPGATimestamp()
-        else:
-            # If not moving, only send stop command occasionally to avoid spam
-            current_time = wpilib.Timer.getFPGATimestamp()
-            if current_time - self.last_drive_time > 0.1:  # 100ms since last movement
-                self.swerve.stop()
-                self.last_drive_time = current_time
+    #     if is_moving:
+    #         # Only send drive command if we're actually moving
+    #         self.swerve.drive(x_speed, y_speed, rotation, field_relative=True)
+    #         self.last_drive_time = wpilib.Timer.getFPGATimestamp()
+    #     else:
+    #         # If not moving, only send stop command occasionally to avoid spam
+    #         current_time = wpilib.Timer.getFPGATimestamp()
+    #         if current_time - self.last_drive_time > 0.1:  # 100ms since last movement
+    #             self.swerve.stop()
+    #             self.last_drive_time = current_time
 
-    def disabledInit(self):
-        """Runs when robot is disabled"""
-        self.is_driving_manually = False
-        # if self.autoCommand and self.autoCommand.isScheduled():
-        #     self.autoCommand.cancel()
-        self.swerve.stop()
-
-    def disabledPeriodic(self):
-        """Prevent any commands from running while disabled"""
-        pass
+    def testExit(self):
+        CommandScheduler.getInstance().cancelAll()

@@ -4,15 +4,17 @@ from phoenix6.swerve import (
     SwerveDrivetrainConstants,
     SwerveModuleConstantsFactory,
     ClosedLoopOutputType, 
-    SteerFeedbackType
+    SteerFeedbackType,
+    SwerveModule
 )
 from wpimath.geometry import Pose2d, Rotation2d, Rotation3d
 from phoenix6.hardware import TalonFX, CANcoder, Pigeon2
 from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration, CurrentLimitsConfigs
+from phoenix6.units import rotations_per_second
 from commands2 import Subsystem, Command
 from phoenix6.controls import StaticBrake
 from phoenix6.configs import Slot0Configs
-from phoenix6.swerve.requests import *
+from phoenix6.swerve.requests import SwerveRequest, FieldCentric, ChassisSpeeds, ApplyRobotSpeeds, SwerveModuleState, FieldCentricFacingAngle
 from subsystems.simdrivetrain import SimDrivetrain
 import wpilib
 # from structs import SwerveModuleStateStruct, Pose2dStruct, Rotation3dStruct
@@ -149,7 +151,7 @@ class Drive(Subsystem):
         return self.drivetrain.get_rotation3d()
     
     def get_position(self, module_id: int):
-        return rotation(self.drivetrain
+        return (self.drivetrain
                 .get_module(module_id)
                 .encoder
                 .get_absolute_position()

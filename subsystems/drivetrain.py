@@ -221,7 +221,7 @@ class Drive(Subsystem):
         self.sim_drivetrain.periodic()
 
     def enable_slow_mode(self, enable: bool):
-        multiplier = 0.3 if enable else 1
+        self.multiplier = 0.3 if enable else 1
     
     def close(self):
         self.drivetrain.close()

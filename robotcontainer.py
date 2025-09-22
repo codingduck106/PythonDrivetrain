@@ -64,8 +64,7 @@ class RobotContainer:
                 config,
                 lambda: wpilib.DriverStation.getAlliance() != self.ALLIANCE_USED_IN_PATHS, # whether pathplanner should flip the autopaths or not depending on which alliance we're on. True if we're on red.
                 drive,
-            )
-        print("AUTOBUILDERCONFIGURED")
+        )
         self.configure_auto_commands() # add subsystems as arguments later
         return AutoBuilder.buildAutoChooser("blue-left-leave")
 

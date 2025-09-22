@@ -3,5 +3,5 @@
 # from subsystems import Drive
 # or something like that idk
 
-from drivetrain import *
-from simdrivetrain import *
+from subsystems.drivetrain import *
+from subsystems.simdrivetrain import *

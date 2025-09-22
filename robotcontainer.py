@@ -3,6 +3,7 @@ from pathplannerlib.auto import AutoBuilder, SendableChooser
 from pathplannerlib.controller import PPHolonomicDriveController
 from wpimath.units import meters
 from subsystems import Drive
+from wpilib import RobotBase
 from wpimath.geometry import Pose2d, Rotation2d
 import wpilib
 from commands2 import Command
@@ -64,6 +65,7 @@ class RobotContainer:
                 lambda: wpilib.DriverStation.getAlliance() != self.ALLIANCE_USED_IN_PATHS, # whether pathplanner should flip the autopaths or not depending on which alliance we're on. True if we're on red.
                 drive,
             )
+        print("AUTOBUILDERCONFIGURED")
         self.configure_auto_commands() # add subsystems as arguments later
         return AutoBuilder.buildAutoChooser("blue-left-leave")
 
@@ -84,8 +86,10 @@ class RobotContainer:
     
     def configureBindings(self) -> None:
         """Configures the controller bindings. So far, we only have drive, which is this."""
-        
-        RESET_POSE.onTrue(InstantCommand(lambda: self.drive.reset_pose()))
+        if not RobotBase.isSimulation():
+            RESET_POSE.onTrue(InstantCommand(lambda: self.drive.reset_pose()))
+        else:
+            pass
     
     def getAutonomousCommand(self) -> Command | typing.Any: #================GETTER=====================
         """Gets the auto command"""

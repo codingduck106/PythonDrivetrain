@@ -1,16 +1,17 @@
 from pathplannerlib.config import RobotConfig, PIDConstants
-from pathplannerlib.auto import AutoBuilder
+from pathplannerlib.auto import AutoBuilder, SendableChooser
 from pathplannerlib.controller import PPHolonomicDriveController
 from wpimath.units import meters
-from subsystems.drivetrain import Drive
+from subsystems import Drive
 from wpimath.geometry import Pose2d, Rotation2d
 import wpilib
-from ntcore import NetworkTableInstance
+from commands2 import Command
 from wpilib import SmartDashboard
 from commands2.instantcommand import InstantCommand
-from commands.defaultdrivecommand import DefaultDriveCommand
+from commands import DefaultDriveCommand
 from constants import *
 import math
+import typing
 
 DEFAULT_MAX_VELOCITY_METERS_PER_SECOND = 6
 DEFAULT_MAX_ROTATIONS_PER_SECOND = 1.2
@@ -23,105 +24,75 @@ class RobotContainer:
     ALLIANCE_USED_IN_PATHS= wpilib.DriverStation.Alliance.kBlue
     
     bot_pose_blue_origin = Pose2d(meters(-8.7736), meters(-4.0257), Rotation2d())
-    def __init__(self, alliance: wpilib.DriverStation.Alliance | None):
-        """Initialize with conflict prevention"""
+    def __init__(self):
+        """Initializes the Robot Container, which is a container containing every subsystem the bot has."""
         self.drive = Drive()  # Use the fixed drivetrain
         self.drive.setDefaultCommand(
             DefaultDriveCommand(self.drive,
-                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftY()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND,
+                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftY()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND, # SEE, LAMBDA FUNCTIONS! I TOLD YOU! (if you don't understand, check defaultdrivecommand.py under the commands fodler)
                                 lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftX()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND,
                                 lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getRightX()) * max_radians_per_second)
         )
-        self.configureBindings()
-        
-        self.autoChooser = self.configure_auto(self.drive)
-        SmartDashboard.putData("Auto Routine", self.autoChooser)
-        self.configureBindings()
-        # Reduced NetworkTables usage
-        self.nt_table = NetworkTableInstance.getDefault().getTable("SmartDashboard")
-        # if self.autoChooser:
-        #     SmartDashboard.putData("Auto Chooser", self.autoChooser)
-        # self.DRIVE_SYSID = SwerveSysidRequest(MotorType.Drive, RequestType.torque_current_foc)
-        # self.STEER_SYSID = SwerveSysidRequest(MotorType.Swerve, RequestType.voltage_out)
 
-    def configure_auto(self, drive: Drive): # add more subsystems later
+        self.configureBindings() # configures the controller bindings for the subsystems.
+        
+        self.autoChooser = self.configure_auto(self.drive) # configures the auto.
+        SmartDashboard.putData("Auto Routine", self.autoChooser) # adds an autochooser to SmartDashboard
+
+    def configure_auto(self, drive: Drive) -> SendableChooser: # add more subsystems later
+        """Configures the auto. We initialize Pathplanner's auto stuff here.
+        
+        Usually contains other subsystems, but we only have drivetrain.
+        
+        :param drive: the drivetrain instance.
+        :returns: The autochooser."""
         try:
-            config = RobotConfig.fromGUISettings()
+            config = RobotConfig.fromGUISettings() # gets the Robot config from a json file
         except Exception as e:
             raise RuntimeError("Could not get Config", e)
         
-        AutoBuilder.configure(
+        AutoBuilder.configure( # AUTOBUILDER CONFIGURATION RAHH
                 drive.get_pose,
                 drive.set_pose,
                 drive.get_robot_relative_speeds,
-                lambda speeds, ff: drive.driveRobotRelative(speeds),  # This calls the fixed method
+                lambda speeds, ff: drive.driveRobotRelative(speeds),  # We use a lambda here because pathplanner also gives us feedforwards, but we don't use feedforwards.
                 PPHolonomicDriveController(
                     PIDConstants(15.0, 0.0, 0.0),
                     PIDConstants(6.85, 0.0, 1.3),
                 ),
                 config,
-                lambda: wpilib.DriverStation.getAlliance() != self.ALLIANCE_USED_IN_PATHS,
+                lambda: wpilib.DriverStation.getAlliance() != self.ALLIANCE_USED_IN_PATHS, # whether pathplanner should flip the autopaths or not depending on which alliance we're on. True if we're on red.
                 drive,
             )
         self.configure_auto_commands() # add subsystems as arguments later
         return AutoBuilder.buildAutoChooser()
 
-    # def get_sysid_routines(self, registry: SubsystemRegistry):
-    #     routines = []
-    #     routines.append(
-    #         DropdownEntry("Drive-Drive Motor",
-    #                       SysIdRoutine(
-    #                           SysIdRoutine.Config(
-    #                               0,
-    #                               0,
-    #                               0,
-    #                               lambda s: SignalLogger.write_string("state", s.__str__()) # type: ignore
-    #                           ),
-    #                       SysIdRoutine.Mechanism(
-    #                           lambda v: (registry
-    #                                      .subsystems[type(Drivetrain)]
-    #                                      .run(self.DRIVE_SYSID.with_voltage)
-    #                                      .schedule()),
-    #                             lambda s: None,
-    #                             registry.subsystems[Drivetrain]
-    #                       )
-    #                       ))
-    #     )
-        # routines.append(
-        #     DropdownEntry("Drive-Steer Motor",
-        #                   SysIdRoutine(
-        #                       SysIdRoutine.Config(
-        #                           0,
-        #                           0,
-        #                           0,
-        #                           lambda s: SignalLogger.write_string("state", s.__str__()) # type: ignore
-        #                       ),
-        #                   SysIdRoutine.Mechanism(
-        #                       lambda v: (registry
-        #                                  .subsystems[Drivetrain]),
-        #                         lambda s: None,
-        #                         registry.subsystems[Drivetrain]
-        #                   )
-        #                   ))
-        # )
-
     @classmethod
-    def to_bot_pose_blue(cls, orig: Pose2d):
+    def to_bot_pose_blue(cls, orig: Pose2d) -> Pose2d:
+        """In Dr. Womp, this is a static method.
+        
+        We use class method here because we want to actually modify the class variable.
+        
+        :param orig: the origin of the field.
+        :returns: a `Pose2d` object containing the current pose relative to the origin."""
         return orig.relativeTo(cls.bot_pose_blue_origin)
     
     
-    def configure_auto_commands(self):
+    def configure_auto_commands(self) -> None:
+        """We add other subsystems here. They have auto commands too!"""
         pass # leave empty for now, add subsystem functions later
     
-    def configureBindings(self):
-        """Simplified bindings to prevent conflicts"""
+    def configureBindings(self) -> None:
+        """Configures the controller bindings. So far, we only have drive, which is this."""
         
-        # Only bind essential commands
         RESET_POSE.onTrue(InstantCommand(lambda: self.drive.reset_pose()))
     
-    def getAutonomousCommand(self):
-        """Get auto command with error handling"""
+    def getAutonomousCommand(self) -> Command | typing.Any: #================GETTER=====================
+        """Gets the auto command"""
         return self.autoChooser.getSelected()
     
     def close(self): # add more subsystems later
+        """closes all the subsystems.
+        
+        so far, only drive :("""
         self.drive.close()

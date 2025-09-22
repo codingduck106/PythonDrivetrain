@@ -65,7 +65,7 @@ class RobotContainer:
                 drive,
             )
         self.configure_auto_commands() # add subsystems as arguments later
-        return AutoBuilder.buildAutoChooser()
+        return AutoBuilder.buildAutoChooser("blue-left-leave")
 
     @classmethod
     def to_bot_pose_blue(cls, orig: Pose2d) -> Pose2d:

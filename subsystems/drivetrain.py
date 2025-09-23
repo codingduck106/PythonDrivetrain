@@ -16,6 +16,7 @@ from phoenix6.configs import Slot0Configs
 from phoenix6.swerve.requests import FieldCentric, ChassisSpeeds, ApplyRobotSpeeds, SwerveModuleState, FieldCentricFacingAngle
 from subsystems.simdrivetrain import SimDrivetrain
 import wpilib
+from wpilib import SmartDashboard
 from ntcore import NetworkTableInstance
 from constants import *
 
@@ -56,15 +57,15 @@ class Drive(Subsystem):
         BLSteerOFFSET = -0.108887
         BRSteerOFFSET = -0.148348
 
-        steerGains = (Slot0Configs() # The steering gains, aka tuning parameters for the PID controllers, which control the motors
-                      .with_k_p(50)
+        self.steerGains = (Slot0Configs() # The nsteering gains, aka tuning parameters for the PID controllers, which control the motors
+                      .with_k_p(0)
                       .with_k_i(0)
-                      .with_k_d(3.0889)
+                      .with_k_d(0)
                       .with_k_s(0.21041)
                       .with_k_v(2.68)
                       .with_k_a(0.084645))
         
-        driveGains = (Slot0Configs() # The driving gains, aka tuning parameters for the PID controllers, which control the motors
+        self.driveGains = (Slot0Configs() # The driving gains, aka tuning parameters for the PID controllers, which control the motors
                       .with_k_p(2.5)
                       .with_k_i(0)
                       .with_k_d(0)
@@ -77,10 +78,10 @@ class Drive(Subsystem):
         moduleConstantsFactory = (SwerveModuleConstantsFactory()  # A SwerveModule constant creator which, given some presets, can create the module constants for every swerve module
                                   .with_drive_motor_gear_ratio(kDriveGearRatio)
                                   .with_steer_motor_gear_ratio(kTurnGearRatio)
-                                  .with_wheel_radius(self.WHEEL_RADIUS_IN)
+                                  .with_wheel_radius(self.WHEEL_RADIUS_IN * 0.0254)
                                   .with_slip_current(90)
-                                  .with_steer_motor_gains(steerGains)
-                                  .with_drive_motor_gains(driveGains)
+                                  .with_steer_motor_gains(self.steerGains)
+                                  .with_drive_motor_gains(self.driveGains)
                                   .with_drive_motor_closed_loop_output(ClosedLoopOutputType
                                                                        .TORQUE_CURRENT_FOC)
                                   .with_steer_motor_closed_loop_output(ClosedLoopOutputType.VOLTAGE)
@@ -126,6 +127,25 @@ class Drive(Subsystem):
         self.current_pose_publisher = network_table.getStructTopic("current pose", Pose2d).publish()
         self.module_positions_publisher = network_table.getDoubleArrayTopic("module positions").publish()
         self.angle_publisher = network_table.getStructTopic("pigeon angle", Rotation3d).publish()
+    
+        #===================================PID TUNING==================================#
+
+        # ==================== DRIVE PID + FF ====================
+        SmartDashboard.putNumber("drive_kP", 2.5)
+        SmartDashboard.putNumber("drive_kI", 0.0)
+        SmartDashboard.putNumber("drive_kD", 0.0)
+        SmartDashboard.putNumber("drive_kS", 6.4111)
+        SmartDashboard.putNumber("drive_kV", 0.087032)
+        SmartDashboard.putNumber("drive_kA", 0.0)
+
+        # ==================== STEER PID + FF ====================
+        SmartDashboard.putNumber("steer_kP", 0.0)
+        SmartDashboard.putNumber("steer_kI", 0.0)
+        SmartDashboard.putNumber("steer_kD", 0.0)
+        SmartDashboard.putNumber("steer_kS", 0.21041)
+        SmartDashboard.putNumber("steer_kV", 2.68)
+        SmartDashboard.putNumber("steer_kA", 0.084645)
+
 
         for i in range(4): # applies a configuration to every drive motor on the drivetrain
             (self.drivetrain.get_module(i)
@@ -148,7 +168,7 @@ class Drive(Subsystem):
         
         :param value: `float` value representing the joystick's input
         :returns: `float` value containing the modified joystick input."""
-        if abs(value) <= 0.1:
+        if abs(value) <= 0.07:
             value = 0
         value = math.copysign(value*value, value)
         return value
@@ -238,6 +258,8 @@ class Drive(Subsystem):
         self.current_pose_publisher.set(drive_pose)
         self.module_positions_publisher.set([self.get_position(i) for i in range(4)])
 
+        self.update_pid_gains()
+
     def simulationPeriodic(self) -> None:
         """Runs the sim drivetrain's periodic function.
         
@@ -293,3 +315,48 @@ class Drive(Subsystem):
                 .encoder
                 .get_absolute_position()
                 .value)
+    
+    #=================================PID TUNING==============================================
+    def update_pid_gains(self):
+        # DRIVE gains
+        drive_kP = SmartDashboard.getNumber("drive_kP", 2.5)
+        drive_kI = SmartDashboard.getNumber("drive_kI", 0.0)
+        drive_kD = SmartDashboard.getNumber("drive_kD", 0.0)
+        drive_kS = SmartDashboard.getNumber("drive_kS", 6.4111)
+        drive_kV = SmartDashboard.getNumber("drive_kV", 0.087032)
+        drive_kA = SmartDashboard.getNumber("drive_kA", 0.0)
+
+        # STEER gains
+        steer_kP = SmartDashboard.getNumber("steer_kP", 0.0)
+        steer_kI = SmartDashboard.getNumber("steer_kI", 0.0)
+        steer_kD = SmartDashboard.getNumber("steer_kD", 0.0)
+        steer_kS = SmartDashboard.getNumber("steer_kS", 0.21041)
+        steer_kV = SmartDashboard.getNumber("steer_kV", 2.68)
+        steer_kA = SmartDashboard.getNumber("steer_kA", 0.084645)
+
+        # Build configs
+        self.driveGains = (
+            Slot0Configs()
+            .with_k_p(drive_kP)
+            .with_k_i(drive_kI)
+            .with_k_d(drive_kD)
+            .with_k_s(drive_kS)
+            .with_k_v(drive_kV)
+            .with_k_a(drive_kA)
+        )
+
+        self.steerGains = (
+            Slot0Configs()
+            .with_k_p(steer_kP)
+            .with_k_i(steer_kI)
+            .with_k_d(steer_kD)
+            .with_k_s(steer_kS)
+            .with_k_v(steer_kV)
+            .with_k_a(steer_kA)
+        )
+
+        # Apply to all 4 modules
+        for i in range(4):
+            module = self.drivetrain.get_module(i)
+            module.drive_motor.configurator.apply(self.driveGains)
+            module.steer_motor.configurator.apply(self.steerGains)

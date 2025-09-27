@@ -1,6 +1,6 @@
 from commands2.button import CommandPS4Controller
 
-# This is just the constants the robot uses
+# This is just the constants the robot uses.
 
 
 class FLConstants:

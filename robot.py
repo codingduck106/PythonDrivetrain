@@ -1,5 +1,4 @@
 import wpilib
-import wpimath.filter
 from ntcore import NetworkTableInstance
 from robotcontainer import RobotContainer
 from wpilib import DriverStation
@@ -15,7 +14,6 @@ class MyRobot(wpilib.TimedRobot):
 
         self.alliance = DriverStation.getAlliance() # the alliance we are on
         self.container = RobotContainer() # ROBOT CONTAINER RAHHH
-        self.controller = wpilib.PS4Controller(0) # controller we use.
         self.swerve = self.container.drive # drivetrain!
         
         

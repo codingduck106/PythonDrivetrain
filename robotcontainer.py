@@ -30,9 +30,9 @@ class RobotContainer:
         self.drive = Drive()  # Use the fixed drivetrain
         self.drive.setDefaultCommand(
             DefaultDriveCommand(self.drive,
-                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftY()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND, # SEE, LAMBDA FUNCTIONS! I TOLD YOU! (if you don't understand, check defaultdrivecommand.py under the commands fodler)
+                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftY()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND, # SEE, LAMBDA FUNCTIONS! I TOLD YOU! (if you don't understand, check defaultdrivecommand.py under the commands folder)
                                 lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getLeftX()) * DEFAULT_MAX_VELOCITY_METERS_PER_SECOND,
-                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getRightX()) * max_radians_per_second)
+                                lambda: -Drive.modifyAxis(DRIVER_CONTROLLER.getRightX() if not RobotBase.isSimulation() else SIM_STEER_CONTROLER.getLeftX()) * max_radians_per_second) # added simulation support
         )
 
         self.configureBindings() # configures the controller bindings for the subsystems.

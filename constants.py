@@ -1,6 +1,6 @@
 from commands2.button import CommandPS4Controller
 
-# This is just the constants the robot uses, what were you expecting? A detailed explanation on what each constant is????
+# This is just the constants the robot uses
 
 
 class FLConstants:
@@ -26,4 +26,5 @@ class BRConstants:
 GYRO = 13
 
 DRIVER_CONTROLLER = CommandPS4Controller(0)
+SIM_STEER_CONTROLER = CommandPS4Controller(1)
 RESET_POSE = DRIVER_CONTROLLER.triangle()

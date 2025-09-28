@@ -20,7 +20,7 @@ max_radians_per_second = DEFAULT_MAX_ROTATIONS_PER_SECOND * math.pi * 2
 
 
 class RobotContainer:
-    """Fixed robot container to prevent command conflicts"""
+    """BOT CONTAINER FOR COMMANDS!!!!!!"""
 
     ALLIANCE_USED_IN_PATHS= wpilib.DriverStation.Alliance.kBlue
     

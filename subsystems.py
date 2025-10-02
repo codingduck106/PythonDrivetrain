@@ -8,11 +8,10 @@ from phoenix6.swerve import (
     SwerveModule
 )
 from wpimath.geometry import Pose2d, Rotation2d, Rotation3d
-from lib2813.talonfxwrapper import TalonFXWrapper
 from phoenix6.hardware import TalonFX, CANcoder
 from rev import SparkBase
 from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration, CurrentLimitsConfigs
-from phoenix6.units import rotations_per_second, rotation, radian
+from phoenix6.units import rotations_per_second, rotation
 from commands2 import Subsystem
 from phoenix6.configs import Slot0Configs
 from phoenix6.swerve.requests import FieldCentric, ChassisSpeeds, ApplyRobotSpeeds, SwerveModuleState, FieldCentricFacingAngle
@@ -370,6 +369,32 @@ class Drive(Subsystem):
             module.steer_motor.configurator.apply(self.steerGains)
 
 
+
+
+
+
+
+
+
+
+
+
+
+#=================================SIMULATION DRIVETRAIN==============================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class SimDrivetrain(SimSwerveDrivetrain):
     """A simulation drivetrain object."""
 
@@ -450,67 +475,18 @@ class SimDrivetrain(SimSwerveDrivetrain):
         
         :returns: `Rotation3d` object containing the sim bot's 3d rotation."""
         return Rotation3d(self.sim_pose.rotation())
-
-# class GroundIntakePivot(Subsystem):
-
-#     TOP = -1.775391
-#     BOTTOM = -0.418457
-#     HARD_STOP = -7.251465
-
-#     def __init__(self, nt_instance: NetworkTableInstance, motor: TalonFX, encoder: CANcoder,
-#                  ) -> None:
-#         """Initializes the elevator subsystem."""
-
-
-#         nt = nt_instance.getTable("GroundIntakePivot")
-#         self.ground_intake_pivot_pub = nt.getDoubleTopic("position").publish()
-#         self.at_position_pub = nt.getBooleanTopic("at position").publish()
-
-
-#         self.motor = motor
-#         self.encoder = encoder
-
-#         self.controller = PIDController(0.15,0, 1e-5)
-#         self.acceptable_error = 1.1
-#         self.start_position = self.TOP
-#         self.control_mode = SparkBase.ControlType.kVoltage
-#         self.rotation_unit = radian
-#         self.setpoint = self.start_position
-
-#         self.isenabled: bool
-
-#     @classmethod
-#     def without_hardware(cls, nt_instance: NetworkTableInstance):
-#         return cls(nt_instance, TalonFX(GROUND_INTAKE_PIVOT), CANcoder(GROUND_INTAKE_CANCODER, "swerve"))
-
-#     def pivotMotor(self):
-#         pivot_motor = TalonFX(GROUND_INTAKE_PIVOT)
-#         pivot_motor.setNeutralMode(NeutralModeValue.BRAKE)
-#         config = TalonFXConfiguration()
-#         config.motor_output.inverted = InvertedValue.COUNTER_CLOCKWISE_POSITIVE
-#         config.current_limits = CurrentLimitsConfigs().with_stator_current_limit(40).with_stator_current_limit_enable(True)
-#         pivot_motor.configurator.apply(config)
-
-#     def get_position_measure(self) -> rotation:
-#         """Gets the elevator's position from the encoder.
-        
-#         :returns: `rotation` object containing the elevator's position."""
-
-        
-#         return rotation(self.motor.get_position().value_as_double)
     
-#     def at_position(self) -> bool:
-#         """Returns whether or not the elevator is at the target position.
-        
-#         :returns: `bool` whether or not the elevator is at the target position."""
-#         return abs(self.get_position_measure() - self.setpoint) < self.acceptable_error
-    
-#     def periodic(self) -> None:
-#         super().periodic()
-#         self.ground_intake_pivot_pub.set(self.get_position_measure())
-#         self.at_position_pub.set(self.at_position())
-#         if wpilib.DriverStation.isEnabled():
-#             self.isenabled = True
-#         else:
-#             self.isenabled = False
+
+
+
+
+
+
+
+
+#=================================GROUND INTAKE PIVOT==============================================
+
+
+
+
 

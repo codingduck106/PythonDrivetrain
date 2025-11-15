@@ -7,42 +7,16 @@ from phoenix6.swerve import (SwerveDrivetrain,
                             SteerFeedbackType,
                             ChassisSpeeds,
                             SwerveModuleState)
-from phoenix6.swerve.requests import ApplyRobotSpeeds, FieldCentric
+from phoenix6.swerve.requests import ApplyRobotSpeeds, FieldCentric, ForwardPerspectiveValue
 from wpimath.units import inchesToMeters
 from ntcore import NetworkTableInstance
-from wpilib import RobotController
+from wpilib import RobotController, DriverStation
+from math import pi
 from constants import *
 from wpimath.geometry import Pose2d, Rotation2d
 from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration
-from commands2 import Subsystem
+from commands2 import Command, Subsystem
 
-
-def epilogue(cls: type):
-    """
-    Decorator that logs all primitive fields of the class
-    to NetworkTables under /EpilogueLog/<ClassName>
-    """
-    # Save original periodic (if any)
-    original_periodic = getattr(cls, "periodic", lambda self: None)
-
-    # Prepare table once (not inside periodic)
-    nt = NetworkTableInstance.getDefault()
-    table = nt.getTable("EpilogueLog").getSubTable(cls.__name__)
-
-    def new_periodic(self):
-        # Call original periodic
-        original_periodic(self)
-
-        # Log all fields on the object
-        for name, value in vars(self).items():
-            if isinstance(value, (int, float, bool, str)):
-                table.putValue(name, value)
-
-    cls.periodic = new_periodic
-    return cls
-
-
-@epilogue
 class SwerveDrive(Subsystem, SwerveDrivetrain):
     def __init__(self, ntInstance: NetworkTableInstance):
         swerveConstants = SwerveDrivetrainConstants().with_can_bus_name(GenericConstants.DRIVE_CAN_LOOP_NAME).with_pigeon2_id(GenericConstants.PIGEON_ID)
@@ -121,6 +95,7 @@ class SwerveDrive(Subsystem, SwerveDrivetrain):
             swerveConstants,
             [fl, fr, bl, br]
         )
+        self.swerve.set_operator_perspective_forward(Rotation2d(0) if DriverStation.getAlliance()==DriverStation.Alliance.kBlue else Rotation2d(pi))
 
         table = ntInstance.getTable("Drive")
         self.pose_pub = table.getStructTopic("Current Drive Pose", Pose2d).publish()
@@ -134,7 +109,9 @@ class SwerveDrive(Subsystem, SwerveDrivetrain):
         self.swerve.set_control(req.with_speeds(speeds))
 
     def teleopDrive(self, speeds: ChassisSpeeds):
-        req = FieldCentric().with_drive_request_type(SwerveModule.DriveRequestType.VELOCITY).with_steer_request_type(SwerveModule.SteerRequestType.POSITION)
+        req = FieldCentric().with_drive_request_type(SwerveModule.DriveRequestType.VELOCITY).with_steer_request_type(SwerveModule.SteerRequestType.POSITION).with_forward_perspective(
+            ForwardPerspectiveValue.OPERATOR_PERSPECTIVE
+        )
         self.swerve.set_control(req.with_velocity_x(speeds.vx).with_velocity_y(speeds.vy).with_rotational_rate(speeds.omega))
 
     def getPose(self) -> Pose2d:
@@ -156,3 +133,6 @@ class SwerveDrive(Subsystem, SwerveDrivetrain):
 
     def simulationPeriodic(self) -> None:
         self.swerve.update_sim_state(0.02, RobotController.getBatteryVoltage())
+
+    def setDefaultCommand(self, command: Command) -> None:
+        return super().setDefaultCommand(command)

@@ -29,4 +29,4 @@ class DefaultDriveCommand(Command):
         if abs(joystickValue) < deadband:
             return 0.0
         # Square the axis for finer control at low speeds
-        return (joystickValue / abs(joystickValue)) * (joystickValue ** 2) * (-1 if DriverStation.getAlliance() == DriverStation.Alliance.kRed else 1)
+        return (joystickValue / abs(joystickValue)) * (joystickValue ** 2)

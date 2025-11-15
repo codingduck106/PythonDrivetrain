@@ -13,9 +13,6 @@ class RobotContainer:
 
         self.drive = SwerveDrive(ntInstance)
 
-        self.autopath_dropdown = AutoBuilder.buildAutoChooser()
-
-        SmartDashboard.putData("Autopath selection", self.autopath_dropdown)
 
         self.configure_bindings()
 
@@ -27,6 +24,3 @@ class RobotContainer:
                 GenericConstants.DriverConstants.DRIVER_CONTROLLER
             )
         )
-
-    def get_auton_command(self) -> Command:
-        return self.autopath_dropdown.getSelected()

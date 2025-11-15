@@ -2,6 +2,7 @@ from commands2 import Command
 from commands2.button import CommandPS4Controller
 from subsystems.drive import SwerveDrive
 from wpimath.kinematics import ChassisSpeeds
+from wpilib import DriverStation
 from constants import DriveConstants
 
 class DefaultDriveCommand(Command):
@@ -28,4 +29,4 @@ class DefaultDriveCommand(Command):
         if abs(joystickValue) < deadband:
             return 0.0
         # Square the axis for finer control at low speeds
-        return (joystickValue / abs(joystickValue)) * (joystickValue ** 2)
+        return (joystickValue / abs(joystickValue)) * (joystickValue ** 2) * (-1 if DriverStation.getAlliance() == DriverStation.Alliance.kRed else 1)

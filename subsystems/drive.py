@@ -1,16 +1,48 @@
 from phoenix6.hardware import TalonFX, CANcoder
-from phoenix6.swerve import *
-from phoenix6.swerve.requests import *
-from pathplannerlib.auto import AutoBuilder, RobotConfig
-from pathplannerlib.controller import PIDConstants, PPHolonomicDriveController
-from phoenix6.units import *
+from phoenix6.swerve import (SwerveDrivetrain,
+                            SwerveDrivetrainConstants,
+                            SwerveModule,
+                            SwerveModuleConstantsFactory,
+                            ClosedLoopOutputType,
+                            SteerFeedbackType,
+                            ChassisSpeeds,
+                            SwerveModuleState)
+from phoenix6.swerve.requests import ApplyRobotSpeeds, FieldCentric
 from wpimath.units import inchesToMeters
 from ntcore import NetworkTableInstance
 from wpilib import RobotController
 from constants import *
-from wpimath.geometry import Pose2d, Rotation2d, Translation2d
+from wpimath.geometry import Pose2d, Rotation2d
+from phoenix6.configs import TalonFXConfiguration, CANcoderConfiguration
 from commands2 import Subsystem
 
+
+def epilogue(cls: type):
+    """
+    Decorator that logs all primitive fields of the class
+    to NetworkTables under /EpilogueLog/<ClassName>
+    """
+    # Save original periodic (if any)
+    original_periodic = getattr(cls, "periodic", lambda self: None)
+
+    # Prepare table once (not inside periodic)
+    nt = NetworkTableInstance.getDefault()
+    table = nt.getTable("EpilogueLog").getSubTable(cls.__name__)
+
+    def new_periodic(self):
+        # Call original periodic
+        original_periodic(self)
+
+        # Log all fields on the object
+        for name, value in vars(self).items():
+            if isinstance(value, (int, float, bool, str)):
+                table.putValue(name, value)
+
+    cls.periodic = new_periodic
+    return cls
+
+
+@epilogue
 class SwerveDrive(Subsystem, SwerveDrivetrain):
     def __init__(self, ntInstance: NetworkTableInstance):
         swerveConstants = SwerveDrivetrainConstants().with_can_bus_name(GenericConstants.DRIVE_CAN_LOOP_NAME).with_pigeon2_id(GenericConstants.PIGEON_ID)
@@ -34,6 +66,15 @@ class SwerveDrive(Subsystem, SwerveDrivetrain):
                    .with_coupling_gear_ratio(
                        DriveConstants.COUPLING_GEAR_RATIO
                    )
+                   .with_drive_motor_initial_configs(
+                       TalonFXConfiguration()
+                   )
+                   .with_steer_motor_initial_configs(
+                       TalonFXConfiguration()
+                   )
+                   .with_encoder_initial_configs(
+                       CANcoderConfiguration()
+                    )
                    )
         
         fl, fr, bl, br = [factory.create_module_constants(

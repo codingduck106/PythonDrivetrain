@@ -23,15 +23,5 @@ class Robot(TimedRobot):
     def robotPeriodic(self) -> None:
         self.commandScheduler.run()
 
-    def autonomousInit(self) -> None:
-        self.autonomousCommand = self.robotContainer.get_auton_command()
-
-        if (self.autonomousCommand):
-            self.autonomousCommand.schedule()
-
-    def teleopInit(self) -> None:
-        if (self.autonomousCommand):
-            self.autonomousCommand.cancel()
-
     def testInit(self) -> None:
         self.commandScheduler.cancelAll()

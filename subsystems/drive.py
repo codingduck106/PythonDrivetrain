@@ -1,10 +1,12 @@
 from phoenix6.hardware import TalonFX, CANcoder
 from phoenix6.swerve import *
+from phoenix6.swerve.requests import *
 from pathplannerlib.auto import AutoBuilder, RobotConfig
 from pathplannerlib.controller import PIDConstants, PPHolonomicDriveController
 from phoenix6.units import *
 from wpimath.units import inchesToMeters
 from ntcore import NetworkTableInstance
+from wpilib import RobotController
 from constants import *
 from wpimath.geometry import Pose2d, Rotation2d, Translation2d
 from commands2 import Subsystem
@@ -86,4 +88,30 @@ class SwerveDrive(Subsystem, SwerveDrivetrain):
 
         self.expected_drive_state_pub = table.getStructArrayTopic("Expected Drive State", SwerveModuleState).publish()
 
-        
+    def autoDrive(self, speeds: ChassisSpeeds):
+        req = ApplyRobotSpeeds()
+        self.swerve.set_control(req.with_speeds(speeds))
+
+    def teleopDrive(self, speeds: ChassisSpeeds):
+        req = FieldCentric().with_drive_request_type(SwerveModule.DriveRequestType.VELOCITY).with_steer_request_type(SwerveModule.SteerRequestType.POSITION)
+        self.swerve.set_control(req.with_velocity_x(speeds.vx).with_velocity_y(speeds.vy).with_rotational_rate(speeds.omega))
+
+    def getPose(self) -> Pose2d:
+        return self.swerve.get_state().pose
+    
+    def setPose(self, pose: Pose2d):
+        self.swerve.reset_pose(pose)
+
+    def getRobotRelativeSpeeds(self) -> ChassisSpeeds:
+        return self.swerve.get_state().speeds
+    
+    def getRotation(self) -> Rotation2d:
+        return self.swerve.get_rotation3d().toRotation2d()
+    
+    def periodic(self) -> None:
+        self.pose_pub.set(self.getPose())
+        self.cur_drive_state_pub.set(self.swerve.get_state().module_states)
+        self.expected_drive_state_pub.set(self.swerve.get_state().module_targets)
+
+    def simulationPeriodic(self) -> None:
+        self.swerve.update_sim_state(0.02, RobotController.getBatteryVoltage())

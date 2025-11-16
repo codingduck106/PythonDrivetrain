@@ -2,7 +2,6 @@ from commands2 import Command
 from commands2.button import CommandPS4Controller
 from subsystems.drive import SwerveDrive
 from wpimath.kinematics import ChassisSpeeds
-from wpilib import DriverStation
 from constants import DriveConstants
 
 class DefaultDriveCommand(Command):

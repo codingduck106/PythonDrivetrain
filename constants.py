@@ -133,6 +133,8 @@ class ElevatorConstants:
 
     ACCEPTABLE_ERROR_ROTATIONS = rotation(0.1)
 
+    HEIGHT_PER_ROTATION_INCHES = 1.63245321
+
 class GroundIntakeConstants:
     PIVOT_UP_POSITION_ROTATIONS = rotation(-0.25)
     PIVOT_DOWN_POSITION_ROTATIONS = rotation(0.25)

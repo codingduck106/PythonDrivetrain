@@ -51,6 +51,8 @@ class SwerveDrive(Subsystem, SwerveDrivetrain):
                     )
                    )
         
+
+        # NOTE: all of this is just one big list comprehension to make it cleaner
         fl, fr, bl, br = [factory.create_module_constants(
                         [GenericConstants.FRONT_LEFT_STEER_ID,
                          GenericConstants.FRONT_RIGHT_STEER_ID,

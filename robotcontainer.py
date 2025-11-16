@@ -1,17 +1,18 @@
 from ntcore import NetworkTableInstance
-from wpilib import SmartDashboard
 from commands.defaultdrivecommand import DefaultDriveCommand
+from commands.defaultelevcommand import DefaultElevCommand
 from constants import GenericConstants
-from commands2 import Command
-from pathplannerlib.auto import AutoBuilder
 
 from subsystems.drive import SwerveDrive
+from subsystems.elevator import Elevator
 
 class RobotContainer:
 
     def __init__(self, ntInstance: NetworkTableInstance):
 
         self.drive = SwerveDrive(ntInstance)
+
+        self.elevator = Elevator(ntInstance)
 
 
         self.configure_bindings()
@@ -22,5 +23,11 @@ class RobotContainer:
             DefaultDriveCommand(
                 self.drive,
                 GenericConstants.DriverConstants.DRIVER_CONTROLLER
+            )
+        )
+        self.elevator.setDefaultCommand(
+            DefaultElevCommand(
+                self.elevator,
+                GenericConstants.OperatorConstants.OPERATOR_CONTROLLER.getLeftY
             )
         )

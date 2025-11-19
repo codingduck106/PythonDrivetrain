@@ -25,3 +25,4 @@ class Robot(TimedRobot):
 
     def testInit(self) -> None:
         self.commandScheduler.cancelAll()
+

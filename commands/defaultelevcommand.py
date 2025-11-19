@@ -10,6 +10,6 @@ class DefaultElevCommand(Command):
 
     def execute(self) -> None:
         if (self.movement() > 0.1):
-            self.elevator.set_voltage(self.movement())
+            self.elevator.set_voltage(self.movement() * 12)
         else:
             self.elevator.set_voltage(0.0)

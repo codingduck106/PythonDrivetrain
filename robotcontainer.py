@@ -28,6 +28,6 @@ class RobotContainer:
         self.elevator.setDefaultCommand(
             DefaultElevCommand(
                 self.elevator,
-                GenericConstants.OperatorConstants.OPERATOR_CONTROLLER.getLeftY
+                lambda: GenericConstants.OperatorConstants.OPERATOR_CONTROLLER.getLeftY()
             )
         )

@@ -70,4 +70,4 @@ class Elevator(Subsystem):
         self.motor.set_control(PositionDutyCycle(get_pos_value(position_name)))
 
     def set_voltage(self, voltage: float) -> None:
-        self.motor.set_control(VoltageOut(voltage))
+        self.motor.set_control(VoltageOut(voltage * 3))

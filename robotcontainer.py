@@ -2,7 +2,7 @@ from ntcore import NetworkTableInstance
 from commands.defaultdrivecommand import DefaultDriveCommand
 from commands.defaultelevcommand import DefaultElevCommand
 from constants import GenericConstants
-from commands2 import RunCommand
+from commands2 import InstantCommand
 from subsystems.drive import SwerveDrive
 from subsystems.elevator import Elevator
 
@@ -12,6 +12,7 @@ class RobotContainer:
 
         self.drive = SwerveDrive(ntInstance)
 
+        # Create elevator - will automatically use ElevatorSim in simulation mode
         self.elevator = Elevator(ntInstance)
 
 
@@ -33,13 +34,13 @@ class RobotContainer:
         )
 
         GenericConstants.ALGAE_GROUND_TRIGGER.onTrue(
-            RunCommand(lambda: self.elevator.set_position("ALGAE_GROUND_A0")).until(self.elevator.at_position)
+            InstantCommand(lambda: self.elevator.set_position("ALGAE_GROUND_A0"))
         )
 
         GenericConstants.ALGAE_L2_TRIGGER.onTrue(
-            RunCommand(lambda: self.elevator.set_position("ALGAE_LOW_A2")).until(self.elevator.at_position)
+            InstantCommand(lambda: self.elevator.set_position("ALGAE_LOW_A2"))
         )
 
         GenericConstants.ALGAE_L3_TRIGGER.onTrue(
-            RunCommand(lambda: self.elevator.set_position("ALGAE_HIGH_A3")).until(self.elevator.at_position)
+            InstantCommand(lambda: self.elevator.set_position("ALGAE_HIGH_A3"))
         )

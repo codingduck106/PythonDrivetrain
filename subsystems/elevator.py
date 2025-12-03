@@ -1,19 +1,16 @@
 from commands2 import Subsystem
 from phoenix6.units import inch
-from wpimath.units import inchesToMeters
 from ntcore import NetworkTableInstance
 from wpimath.controller import PIDController
 from constants import GenericConstants, ElevatorConstants
-from phoenix6.configs import Slot0Configs
-from phoenix6.controls import VoltageOut, PositionVoltage
+from phoenix6.controls import VoltageOut
 from phoenix6.signals import NeutralModeValue
 from phoenix6.hardware import TalonFX
-
 from enum import Enum
 
 
 def get_pos_value(name: str) -> float:
-    return Elevator.POSITIONS[name].value / ElevatorConstants.HEIGHT_PER_ROTATION_INCHES # inches / inchesperrotation
+    return Elevator.POSITIONS[name].value / ElevatorConstants.HEIGHT_PER_ROTATION_INCHES
 
 class Elevator(Subsystem):
     POSITIONS = Enum('POSITIONS', {
@@ -40,6 +37,7 @@ class Elevator(Subsystem):
 
         self.motor = TalonFX(GenericConstants.ELEVATOR_MOTOR_ID)
         self.motor.setNeutralMode(NeutralModeValue.BRAKE)
+        self.motor.set_position(0.0)
 
         self.controller = PIDController(
             ElevatorConstants.ELEVATOR_P,
@@ -47,16 +45,10 @@ class Elevator(Subsystem):
             ElevatorConstants.ELEVATOR_D
         )
 
-        self.motor.configurator.apply(
-            Slot0Configs()
-            .with_k_p(ElevatorConstants.ELEVATOR_P)
-            .with_k_i(ElevatorConstants.ELEVATOR_I)
-            .with_k_d(ElevatorConstants.ELEVATOR_D)
-        )
-
         self.currentSetpoint = get_pos_value("STOW_S2")
-
-        # Publishers
+        self.controller.setSetpoint(self.currentSetpoint)
+        
+        self.manualControlActive = False
 
         table = ntInstance.getTable("Elevator")
         self.setpoint_pub = table.getDoubleTopic("Setpoint (Inches)").publish()
@@ -68,15 +60,21 @@ class Elevator(Subsystem):
         self.position_pub.set(self.motor.get_position().value * ElevatorConstants.HEIGHT_PER_ROTATION_INCHES)
         at_position = abs(self.motor.get_position().value - self.currentSetpoint) < ElevatorConstants.ACCEPTABLE_ERROR_ROTATIONS
         self.at_position_pub.set(at_position)
+        
+        if not self.manualControlActive:
+            volt_in = self.controller.calculate(self.motor.get_position().value)
+            self.motor.set_control(VoltageOut(volt_in))
 
     def set_position(self, position_name: str) -> None:
         self.currentSetpoint = get_pos_value(position_name)
         self.controller.setSetpoint(self.currentSetpoint)
-        volt_in = self.controller.calculate(self.motor.get_position().value)
-        self.motor.set_control(VoltageOut(volt_in))
+        self.manualControlActive = False
 
     def set_voltage(self, voltage: float) -> None:
-        self.motor.set_control(VoltageOut(voltage * 12))
+        self.motor.set_control(VoltageOut(voltage))
+    
+    def set_manual_control(self, active: bool) -> None:
+        self.manualControlActive = active
 
     def at_position(self):
         return abs(self.motor.get_position().value - self.currentSetpoint) < ElevatorConstants.ACCEPTABLE_ERROR_ROTATIONS

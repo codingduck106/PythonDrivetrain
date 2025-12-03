@@ -9,7 +9,11 @@ class DefaultElevCommand(Command):
         self.addRequirements(self.elevator)
 
     def execute(self) -> None:
-        if (self.movement() > 0.1):
+        if (abs(self.movement()) > 0.1):
+            self.elevator.set_manual_control(True)
             self.elevator.set_voltage(self.movement() * 12)
         else:
-            self.elevator.set_voltage(0.0)
+            self.elevator.set_manual_control(False)
+
+    def end(self, interrupted: bool) -> None:
+        self.elevator.set_manual_control(False)

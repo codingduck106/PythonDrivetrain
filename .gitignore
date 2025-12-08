@@ -3,3 +3,6 @@ __pycache__
 .idea
 ctre_sim
 logs
+.wpilib
+wpilib_preferences.json
+.pytest_cache

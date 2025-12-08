@@ -35,7 +35,7 @@ class Elevator(Subsystem):
     def __init__(self, ntInstance: NetworkTableInstance):
         super().__init__()
 
-        self.motor = TalonFX(GenericConstants.ELEVATOR_MOTOR_ID)
+        self.motor = TalonFX(GenericConstants.ELEVATOR_MOTOR_ID, GenericConstants.MECHANISM_CAN_LOOP_NAME)
         self.motor.setNeutralMode(NeutralModeValue.BRAKE)
         self.motor.set_position(0.0)
 
